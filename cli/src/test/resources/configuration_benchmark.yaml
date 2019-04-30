@@ -1,0 +1,17 @@
+logLevel: trace
+
+source:
+  database:
+    host: 127.0.0.1
+    port: 1521
+    name: ORCLCDB
+    user: C##EGRES
+    password: Oradoc_db1
+
+target:
+  database:
+    host: 127.0.0.1
+    port: 5432
+    name: postgres
+    user: postgres
+    password: 

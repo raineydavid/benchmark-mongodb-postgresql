@@ -1,0 +1,208 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.ongres</groupId>
+    <artifactId>build-parent</artifactId>
+    <version>1.0.3</version>
+  </parent>
+
+  <groupId>com.ongres.benchmark</groupId>
+  <artifactId>benchmark-parent</artifactId>
+  <version>0.1-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>benchmark: parent pom</name>
+  <description>Parent pom for benchmark project</description>
+
+  <inceptionYear>2019</inceptionYear>
+
+  <organization>
+    <name>OnGres, Inc.</name>
+    <url>https://www.ongres.com</url>
+  </organization>
+
+  <developers>
+    <developer>
+      <id>@adescoms</id>
+      <name>Adrián Escoms</name>
+    </developer>
+    <developer>
+      <id>@teoincontatto</id>
+      <name>Matteo Melli</name>
+    </developer>
+    <developer>
+      <id>@begonapm</id>
+      <name>Begoña Pérez Martín</name>
+    </developer>
+    <developer>
+      <id>@jorsol</id>
+      <name>Jorge Solórzano</name>
+    </developer>
+  </developers>
+
+  <modules>
+    <module>cli</module>
+    <module>integration-test</module>
+  </modules>
+
+  <scm>
+    <url>https://gitlab.com/ongresinc/benchmark</url>
+  </scm>
+
+  <properties>
+    <maven.compiler.release>11</maven.compiler.release>
+    <!-- Dependencies versions -->
+    <postgresql-jdbc.version>42.2.4</postgresql-jdbc.version>
+    <guava.version>27.1-jre</guava.version>
+    <jool.version>0.9.14</jool.version>
+    <jackson.version>2.9.8</jackson.version>
+    <picocli.version>3.9.6</picocli.version>
+    <docker-junit-extension.version>1.2.0</docker-junit-extension.version>
+    <reactor.version>Californium-SR6</reactor.version>
+    <hikaricp.version>3.3.1</hikaricp.version>
+    <immutables.version>2.7.5</immutables.version>
+    <mockito.version>2.25.1</mockito.version>
+    <mongodb.version>3.10.1</mongodb.version>
+    <metrics.version>4.0.5</metrics.version>
+    <rolling.metrics.version>2.0.3</rolling.metrics.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-bom</artifactId>
+        <version>${log4j2.version}</version>
+        <scope>import</scope>
+        <type>pom</type>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson.version}</version>
+        <scope>import</scope>
+        <type>pom</type>
+      </dependency>
+      <dependency>
+        <groupId>org.junit</groupId>
+        <artifactId>junit-bom</artifactId>
+        <version>${junit.version}</version>
+        <scope>import</scope>
+        <type>pom</type>
+      </dependency>
+      <dependency>
+        <groupId>io.projectreactor</groupId>
+        <artifactId>reactor-bom</artifactId>
+        <version>${reactor.version}</version>
+        <scope>import</scope>
+        <type>pom</type>
+      </dependency>
+      <dependency>
+        <groupId>com.google.guava</groupId>
+        <artifactId>guava</artifactId>
+        <version>${guava.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.jooq</groupId>
+        <artifactId>jool</artifactId>
+        <version>${jool.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-annotations</artifactId>
+        <version>${spotbugs.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>info.picocli</groupId>
+        <artifactId>picocli</artifactId>
+        <version>${picocli.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.ongres</groupId>
+        <artifactId>docker-junit-extension</artifactId>
+        <version>${docker-junit-extension.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.postgresql</groupId>
+        <artifactId>postgresql</artifactId>
+        <version>${postgresql-jdbc.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.zaxxer</groupId>
+        <artifactId>HikariCP</artifactId>
+        <version>${hikaricp.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.immutables</groupId>
+        <artifactId>value</artifactId>
+        <version>${immutables.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-core</artifactId>
+        <version>${mockito.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.mongodb</groupId>
+        <artifactId>mongodb-driver-sync</artifactId>
+        <version>${mongodb.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.mongodb</groupId>
+        <artifactId>mongodb-driver-sync</artifactId>
+        <version>${mongodb.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.dropwizard.metrics</groupId>
+        <artifactId>metrics-bom</artifactId>
+        <version>${metrics.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.github.vladimir-bukhtoyarov</groupId>
+        <artifactId>rolling-metrics</artifactId>
+        <version>${rolling.metrics.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-slf4j-impl</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.github.spotbugs</groupId>
+      <artifactId>spotbugs-annotations</artifactId>
+      <scope>provided</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>com.google.code.findbugs</groupId>
+          <artifactId>jsr305</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+  </dependencies>
+</project>

@@ -1,0 +1,7 @@
+mappings:
+  - one:
+    - one:
+      - one: 1
+      - two: 2
+    - two: 2
+  - two: 2
