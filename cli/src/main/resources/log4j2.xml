@@ -7,7 +7,6 @@
   </Appenders>
   <Loggers>
     <Logger name="com.ongres.benchmark" level="TRACE" />
-    <Logger name="com.ongres.egresfw" level="TRACE" />
     <Root level="INFO">
       <AppenderRef ref="Console" />
     </Root>

@@ -56,7 +56,8 @@ public class PostgresBenchmarkIt {
         "--parallelism", "4", 
         "--target-database-port", "" + postgres.getPort(5432),
         "--metrics", "PT10S",
-        "--metrics-reporter", "log");
+        "--metrics-reporter", "log",
+        "--transactions", "100000");
   }
 
   private void setupBenchmark(Container postgres)

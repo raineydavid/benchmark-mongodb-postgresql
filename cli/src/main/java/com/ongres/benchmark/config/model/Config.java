@@ -36,12 +36,17 @@ public class Config {
   @Option(names = {"--benchmark-target"}, 
       description = "Specify the benchmark target: postgres or mongo")
   private String targetType = "postgres";
-  
+
   @Option(names = {"--duration"}, 
       description = "Set benchmark duration", 
-      required = true,
+      required = false,
       converter = DurationConverter.class)
-  private String duration = "PT60S";
+  private String duration;
+
+  @Option(names = {"--transactions"}, 
+      description = "Set benchmark transactions that will be executed", 
+      required = false)
+  private Integer transactions;
 
   @Option(names = {"--metrics"}, 
       description = "Set metrics period", 
@@ -104,12 +109,21 @@ public class Config {
   }
 
   @JsonIgnore
-  public Duration getDurationAsDuration() {
-    return Duration.parse(duration);
+  public Optional<Duration> getDurationAsDuration() {
+    return Optional.ofNullable(duration)
+        .map(m -> Duration.parse(m));
   }
 
   public void setDuration(String duration) {
     this.duration = duration;
+  }
+
+  public Integer getTransactions() {
+    return transactions;
+  }
+
+  public void setTransactions(Integer transactions) {
+    this.transactions = transactions;
   }
 
   public String getMetrics() {

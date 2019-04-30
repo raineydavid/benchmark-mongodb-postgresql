@@ -164,13 +164,20 @@ public class App  extends Options implements Callable<Void> {
       
       Scheduler scheduler = Schedulers.newParallel("benchmark", 4);
       closer.register(() -> Unchecked.runnable(() -> scheduler.dispose()));
-      try {
-        Flux.range(0, Integer.MAX_VALUE)
+      BenchmarkSubscriber benchmarkSubscriber = Flux.range(0, 
+            getConfig().getTransactions() != null 
+            ? getConfig().getTransactions() : Integer.MAX_VALUE)
           .flatMap(i -> Mono.just(i).subscribeOn(scheduler))
-          .subscribeWith(new BenchmarkSubscriber(benchmark))
-          .get(getConfig().getDurationAsDuration().toSeconds(), TimeUnit.SECONDS);
-      } catch (TimeoutException ex) {
-        return;
+          .subscribeWith(new BenchmarkSubscriber(benchmark));
+      if (getConfig().getDurationAsDuration().isPresent()) {
+        try {
+          benchmarkSubscriber
+            .get(getConfig().getDurationAsDuration().get().toSeconds(), TimeUnit.SECONDS);
+        } catch (TimeoutException ex) {
+          return;
+        }
+      } else {
+        benchmarkSubscriber.get();
       }
     }
   }

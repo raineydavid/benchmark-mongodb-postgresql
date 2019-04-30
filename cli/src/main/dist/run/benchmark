@@ -1,13 +1,5 @@
 #!/bin/sh
 
 LIB_PATH="$(dirname "$0")/../lib"
-ORACLE_JDBC_JAR_PATH="$(realpath "$LIB_PATH/ojdbc8.jar")"
 
-if [ ! -f "$ORACLE_JDBC_JAR_PATH" ]
-then
-  echo "Please download Oracle JDBC driver 'ojdbc8.jar' from: https://www.oracle.com/technetwork/database/features/jdbc/jdbc-ucp-122-3110062.html" >&2
-  echo "and mount it in folder /maven/lib with: '-v <path to ojdbc8.jar>:/maven/lib/ojdbc8.jar'" >&2
-  exit 1
-fi
-
-exec java -cp "$ORACLE_JDBC_JAR_PATH:$LIB_PATH/benchmark-@{project.version}.jar" @{project.mainClass} "$@"
+exec java -cp "$LIB_PATH/benchmark-@{project.version}.jar" @{project.mainClass} "$@"
