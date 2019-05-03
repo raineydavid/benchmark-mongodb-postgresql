@@ -44,6 +44,7 @@ public class PostgresFlightBenchmark implements Runnable, AutoCloseable {
    */
   public static PostgresFlightBenchmark create(ConnectionSupplier connectionSupplier,
       int bookingSleep, int dayRange) {
+    Preconditions.checkArgument(bookingSleep >= 0);
     Preconditions.checkArgument(dayRange > 0);
     return new PostgresFlightBenchmark(connectionSupplier, bookingSleep, dayRange);
   }

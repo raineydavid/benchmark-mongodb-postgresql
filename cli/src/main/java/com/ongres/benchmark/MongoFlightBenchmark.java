@@ -59,6 +59,7 @@ public class MongoFlightBenchmark implements Runnable, AutoCloseable {
    */
   public static MongoFlightBenchmark create(MongoClient client, String databaseName,
       int bookingSleep, int dayRange) {
+    Preconditions.checkArgument(bookingSleep >= 0);
     Preconditions.checkArgument(dayRange > 0);
     MongoDatabase database = client.getDatabase(databaseName);
     return new MongoFlightBenchmark(client,
