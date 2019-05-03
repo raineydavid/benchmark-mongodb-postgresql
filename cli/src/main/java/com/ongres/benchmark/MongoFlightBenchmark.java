@@ -2,6 +2,7 @@ package com.ongres.benchmark;
 
 import com.google.common.base.Preconditions;
 import com.mongodb.MongoCommandException;
+import com.mongodb.MongoException;
 import com.mongodb.TransactionOptions;
 import com.mongodb.WriteConcern;
 import com.mongodb.client.AggregateIterable;
@@ -97,7 +98,10 @@ public class MongoFlightBenchmark implements Runnable, AutoCloseable {
         session.commitTransaction();
       } catch (Exception ex) {
         if (ex instanceof MongoCommandException
-            && ((MongoCommandException) ex).getErrorCode() == 112) {
+            && (((MongoCommandException) ex).hasErrorLabel(
+                MongoException.TRANSIENT_TRANSACTION_ERROR_LABEL)
+                || ((MongoCommandException) ex).hasErrorLabel(
+                    MongoException.UNKNOWN_TRANSACTION_COMMIT_RESULT_LABEL))) {
           throw new RetryUserOperationException(ex);
         }
         try {
