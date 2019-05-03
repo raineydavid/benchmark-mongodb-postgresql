@@ -6,7 +6,6 @@
     </Console>
   </Appenders>
   <Loggers>
-    <Logger name="com.ongres.egresfw" level="TRACE" />
     <Logger name="com.ongres.benchmark" level="TRACE" />
     <Logger name="com.ongres.junit.docker" level="TRACE" />
     <Root level="INFO">

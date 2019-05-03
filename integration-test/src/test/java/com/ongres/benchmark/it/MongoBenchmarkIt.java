@@ -45,13 +45,15 @@ public class MongoBenchmarkIt {
     setupBenchmark(mongo);
     App.test(
         "--benchmark-target", "mongo", 
-        "--parallelism", "4", 
+        "--parallelism", "40", 
+        "--day-range", "30", 
+        "--booking-sleep", "0", 
         "--target-database-port", "" + mongo.getPort(27017),
         "--target-database-user", "",
         "--target-database-name", "test",
         "--metrics", "PT10S",
         "--metrics-reporter", "log",
-        "--transactions", "1000");
+        "--transactions", "10000");
   }
 
   private void setupBenchmark(Container mongo) throws DockerException, InterruptedException {

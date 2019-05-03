@@ -25,19 +25,25 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.config.Configurator;
 import org.jooq.lambda.Unchecked;
 import org.postgresql.PGProperty;
+import org.reactivestreams.Subscription;
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.IDefaultValueProvider;
 import picocli.CommandLine.Model.ArgSpec;
+import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
@@ -121,7 +127,7 @@ public class App  extends Options implements Callable<Void> {
   @SuppressWarnings("resource")
   private void execute() throws Exception {
     try (Closer closer = Closer.create()) {
-      updateLogLevel();
+      updateLogLevel(closer);
   
       Closeable metricsReporter = () -> { };
       if (!getConfig().getMetricsAsDuration().orElse(Duration.ZERO).isZero()) {
@@ -151,7 +157,7 @@ public class App  extends Options implements Callable<Void> {
       }
       closer.register(metricsReporter);
       
-      Runnable benchmark;
+      final BenchmarkRunner benchmark;
       
       if (getConfig().getTargetType().equals("mongo")) {
         benchmark = createMongoBenchmark(closer);
@@ -162,27 +168,88 @@ public class App  extends Options implements Callable<Void> {
             + getConfig().getTargetType() + ". Must be postgres or mongo");
       }
       
-      Scheduler scheduler = Schedulers.newParallel("benchmark", 4);
+      Scheduler scheduler = Schedulers.newParallel("benchmark", getConfig().getParallelism());
       closer.register(() -> Unchecked.runnable(() -> scheduler.dispose()));
-      BenchmarkSubscriber benchmarkSubscriber = Flux.range(0, 
+      AppSubscriber appSubscriber = Flux.range(0, 
             getConfig().getTransactions() != null 
             ? getConfig().getTransactions() : Integer.MAX_VALUE)
-          .flatMap(i -> Mono.just(i).subscribeOn(scheduler))
-          .subscribeWith(new BenchmarkSubscriber(benchmark));
+          .flatMap(i -> Mono.just(i).subscribeOn(scheduler)
+              .doOnNext(Unchecked.consumer(ii -> benchmark.run())),
+              getConfig().getParallelism())
+          .subscribeWith(new AppSubscriber());
       if (getConfig().getDurationAsDuration().isPresent()) {
         try {
-          benchmarkSubscriber
+          appSubscriber
             .get(getConfig().getDurationAsDuration().get().toSeconds(), TimeUnit.SECONDS);
         } catch (TimeoutException ex) {
           return;
         }
       } else {
-        benchmarkSubscriber.get();
+        appSubscriber.get();
       }
     }
   }
 
-  private Runnable createPostgresBenchmark(Closer closer) {
+  public class AppSubscriber extends BaseSubscriber<Object> implements Future<Void> {
+    private final CompletableFuture<Void> future = new CompletableFuture<Void>();
+    
+    @Override
+    protected void hookOnSubscribe(Subscription subscription) {
+      request(getConfig().getParallelism());
+    }
+
+    @Override
+    protected void hookOnNext(Object value) {
+      request(1);
+    }
+
+    @Override
+    protected void hookOnComplete() {
+      future.complete(null);
+    }
+
+    @Override
+    protected void hookOnError(Throwable throwable) {
+      future.completeExceptionally(throwable);
+      if (throwable instanceof RuntimeException) {
+        throw (RuntimeException) throwable;
+      }
+      throw new RuntimeException(throwable);
+    }
+
+    @Override
+    protected void hookOnCancel() {
+      future.cancel(true);
+    }
+
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean isCancelled() {
+      return future.isCancelled();
+    }
+
+    @Override
+    public boolean isDone() {
+      return future.isDone();
+    }
+
+    @Override
+    public Void get() throws InterruptedException, ExecutionException {
+      return future.get();
+    }
+
+    @Override
+    public Void get(long timeout, TimeUnit unit)
+        throws InterruptedException, ExecutionException, TimeoutException {
+      return future.get(timeout, unit);
+    }
+  }
+
+  private BenchmarkRunner createPostgresBenchmark(Closer closer) {
     Properties jdbcProperties = new Properties();
     PGProperty.PG_HOST.set(jdbcProperties, getConfig().getTarget().getDatabase().getHost());
     PGProperty.PG_PORT.set(jdbcProperties, getConfig().getTarget().getDatabase().getPort());
@@ -191,12 +258,13 @@ public class App  extends Options implements Callable<Void> {
     PGProperty.PASSWORD.set(jdbcProperties, getConfig().getTarget().getDatabase().getPassword());
     ConnectionSupplier connectionSupplier =
         new HikariConnectionSupplier(new PostgresConnectionSupplier(jdbcProperties));
-    PostgresFlightBenchmark benchmark = PostgresFlightBenchmark.create(connectionSupplier);
+    PostgresFlightBenchmark benchmark = PostgresFlightBenchmark.create(connectionSupplier,
+        getConfig().getBookingSleep(), getConfig().getDayRange());
     closer.register(() -> Unchecked.runnable(() -> benchmark.close()));
-    return benchmark;
+    return new BenchmarkRunner(benchmark);
   }
 
-  private Runnable createMongoBenchmark(Closer closer) {
+  private BenchmarkRunner createMongoBenchmark(Closer closer) {
     MongoClient client = MongoClients.create(MongoClientSettings.builder()
         .applyConnectionString(new ConnectionString("mongodb://"
             + (getConfig().getTarget().getDatabase().getUser().isEmpty() ? "" 
@@ -212,13 +280,18 @@ public class App  extends Options implements Callable<Void> {
             .maxConnectionIdleTime(60, TimeUnit.SECONDS))
         .build());
     MongoFlightBenchmark benchmark = MongoFlightBenchmark.create(client, 
-        getConfig().getTarget().getDatabase().getName());
+        getConfig().getTarget().getDatabase().getName(),
+        getConfig().getBookingSleep(), getConfig().getDayRange());
     closer.register(() -> Unchecked.runnable(() -> benchmark.close()));
-    return benchmark;
+    return new BenchmarkRunner(benchmark);
   }
 
-  private void updateLogLevel() {
-    Configurator.setLevel("com.ongres.benchmark", getConfig().getLogLevelAsEnum().getLogLevel());
+  private void updateLogLevel(Closer closer) {
+    if (getConfig().getLogLevel() != null) {
+      Level previousLevel = LogManager.getLogger("com.ongres.benchmark").getLevel();
+      Configurator.setLevel("com.ongres.benchmark", getConfig().getLogLevelAsEnum().getLogLevel());
+      closer.register(() -> Configurator.setLevel("com.ongres.benchmark", previousLevel));
+    }
   }
 
 

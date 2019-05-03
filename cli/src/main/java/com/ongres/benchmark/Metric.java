@@ -6,6 +6,7 @@ import com.codahale.metrics.Timer;
 public enum Metric {
   
   TRANSACTIONS("transactions", Meter.class),
+  RETRY("retry", Meter.class),
   RESPONSE_TIME("response-time", Timer.class);
   
   private final String name;

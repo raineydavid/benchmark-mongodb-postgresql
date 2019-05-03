@@ -10,7 +10,6 @@ import com.codahale.metrics.Slf4jReporter.LoggingLevel;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.jmx.JmxReporter;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
-import com.github.rollingmetrics.histogram.HdrBuilder;
 import com.google.common.base.Preconditions;
 
 import java.io.Closeable;
@@ -18,6 +17,7 @@ import java.nio.file.Paths;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
+import org.mpierce.metrics.reservoir.hdrhistogram.HdrHistogramReservoir;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +48,8 @@ public class MetricsManager {
    */
   public static Timer timer(Metric metric) {
     Preconditions.checkArgument(metric.getType() == Timer.class);
-    return METRIC_REGISTRY.timer(metric.getName());
+    return METRIC_REGISTRY.timer(metric.getName(), 
+        () -> new Timer(new HdrHistogramReservoir()));
   }
 
   /**
@@ -56,9 +57,8 @@ public class MetricsManager {
    */
   public static Histogram histogram(Metric metric) {
     Preconditions.checkArgument(metric.getType() == Histogram.class);
-    HdrBuilder hdrBuilder = new HdrBuilder();
-    hdrBuilder.withSignificantDigits(4);
-    return hdrBuilder.buildAndRegisterHistogram(METRIC_REGISTRY, metric.getName());
+    return METRIC_REGISTRY.histogram(metric.getName(), 
+        () -> new Histogram(new HdrHistogramReservoir()));
   }
 
   /**

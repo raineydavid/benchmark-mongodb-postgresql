@@ -27,7 +27,7 @@ public class Config {
       required = false, 
       converter = LogLevelConverter.class)
   @JsonProperty
-  private String logLevel = LogLevel.INFO.name().toLowerCase(Locale.US);
+  private String logLevel;
   
   @Option(names = {"--parallelism"}, 
       description = "Specify the parallelism that will be used to write to target")
@@ -47,6 +47,16 @@ public class Config {
       description = "Set benchmark transactions that will be executed", 
       required = false)
   private Integer transactions;
+
+  @Option(names = {"--booking-sleep"}, 
+      description = "Set booking sleep before inserting seat table", 
+      required = true)
+  private int bookingSleep = 0;
+
+  @Option(names = {"--day-range"}, 
+      description = "Set day range when inserting / updating audit table", 
+      required = true)
+  private int dayRange = 1;
 
   @Option(names = {"--metrics"}, 
       description = "Set metrics period", 
@@ -193,5 +203,21 @@ public class Config {
     } else {
       this.metricsFilter = metricsFilter;
     }
+  }
+
+  public int getBookingSleep() {
+    return bookingSleep;
+  }
+
+  public void setBookingSleep(int bookingSleep) {
+    this.bookingSleep = bookingSleep;
+  }
+
+  public int getDayRange() {
+    return dayRange;
+  }
+
+  public void setDayRange(int dayRange) {
+    this.dayRange = dayRange;
   }
 }

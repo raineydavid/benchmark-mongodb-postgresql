@@ -1,5 +1,7 @@
 package com.ongres.benchmark;
 
+import com.google.common.base.Preconditions;
+import com.mongodb.MongoCommandException;
 import com.mongodb.TransactionOptions;
 import com.mongodb.WriteConcern;
 import com.mongodb.client.AggregateIterable;
@@ -10,10 +12,14 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Aggregates;
 import com.mongodb.client.model.UpdateOptions;
 
+import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.logging.log4j.LogManager;
@@ -31,28 +37,35 @@ public class MongoFlightBenchmark implements Runnable, AutoCloseable {
   private final MongoCollection<Document> seat;
   private final MongoCollection<Document> payment;
   private final MongoCollection<Document> audit;
+  private final int bookingSleep;
+  private final int dayRange;
 
   private MongoFlightBenchmark(MongoClient client, MongoCollection<Document> schedule,
       MongoCollection<Document> seat, MongoCollection<Document> payment,
-      MongoCollection<Document> audit) {
+      MongoCollection<Document> audit, int bookingSleep, int dayRange) {
     super();
     this.client = client;
     this.schedule = schedule;
     this.seat = seat;
     this.payment = payment;
     this.audit = audit;
+    this.bookingSleep = bookingSleep;
+    this.dayRange = dayRange;
   }
 
   /**
    * Create an instance of {@class MongoFlightBenchmark}.
    */
-  public static MongoFlightBenchmark create(MongoClient client, String databaseName) {
+  public static MongoFlightBenchmark create(MongoClient client, String databaseName,
+      int bookingSleep, int dayRange) {
+    Preconditions.checkArgument(dayRange > 0);
     MongoDatabase database = client.getDatabase(databaseName);
     return new MongoFlightBenchmark(client,
         database.getCollection("schedule"),
         database.getCollection("seat"),
         database.getCollection("payment"),
-        database.getCollection("audit"));
+        database.getCollection("audit"),
+        bookingSleep, dayRange);
   }
 
   @Override
@@ -71,14 +84,22 @@ public class MongoFlightBenchmark implements Runnable, AutoCloseable {
           .writeConcern(WriteConcern.MAJORITY)
           .build());
       try {
-        Document userSchedule = getUserSchedule(session);
-        Object userId = generateUserId();
-        Timestamp currentTimestamp = Timestamp.from(Instant.now());
+        final Document userSchedule = getUserSchedule(session);
+        final Object userId = generateUserId();
+        final Instant now = Instant.now();
+        final Timestamp currentTimestamp = Timestamp.from(now);
+        final Date day = Date.valueOf(LocalDate.now().plus(
+            now.toEpochMilli() % dayRange, ChronoUnit.DAYS));
+        TimeUnit.SECONDS.sleep(bookingSleep);
         insertSeat(session, userSchedule, userId, currentTimestamp);
         insertPayment(session, userSchedule, userId, currentTimestamp);
-        insertAudit(session, userSchedule, currentTimestamp);
+        insertAudit(session, userSchedule, day, currentTimestamp);
         session.commitTransaction();
       } catch (Exception ex) {
+        if (ex instanceof MongoCommandException
+            && ((MongoCommandException) ex).getErrorCode() == 112) {
+          throw new RetryUserOperationException(ex);
+        }
         try {
           session.abortTransaction();
         } catch (Exception abortEx) {
@@ -122,10 +143,11 @@ public class MongoFlightBenchmark implements Runnable, AutoCloseable {
   }
 
   private void insertAudit(ClientSession session, Document userSchedule,
-      Timestamp currentTimestamp) {
+      Date day, Timestamp currentTimestamp) {
     audit.updateOne(session, 
         new Document()
-        .append("schedule_id", userSchedule.getObjectId("_id")), 
+        .append("schedule_id", userSchedule.getObjectId("_id"))
+        .append("day", day), 
         new Document()
         .append("$set", new Document().append("date", currentTimestamp))
         .append("$inc", new Document().append("seats_occupied", 1)),

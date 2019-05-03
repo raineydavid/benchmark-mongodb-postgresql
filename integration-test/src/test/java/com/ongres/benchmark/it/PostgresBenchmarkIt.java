@@ -53,11 +53,13 @@ public class PostgresBenchmarkIt {
     setupBenchmark(postgres);
     App.test(
         "--benchmark-target", "postgres", 
-        "--parallelism", "4", 
+        "--parallelism", "40", 
+        "--day-range", "30", 
+        "--booking-sleep", "0", 
         "--target-database-port", "" + postgres.getPort(5432),
         "--metrics", "PT10S",
         "--metrics-reporter", "log",
-        "--transactions", "100000");
+        "--transactions", "1000000");
   }
 
   private void setupBenchmark(Container postgres)
@@ -105,9 +107,11 @@ public class PostgresBenchmarkIt {
           + "user_id uuid, "
           + "amount money)");
       statement.execute("create table audit ("
-          + "schedule_id uuid primary key, "
+          + "schedule_id uuid not null,"
+          + "day date not null,"
           + "date timestamp without time zone,"
-          + "seats_occupied int)");
+          + "seats_occupied int,"
+          + "primary key (schedule_id,day))");
       connection.commit();
       logger.info("Importing data");
       postgres.execute("psql", "-U", "postgres", "-c", 

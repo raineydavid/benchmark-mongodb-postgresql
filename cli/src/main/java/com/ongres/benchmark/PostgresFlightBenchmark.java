@@ -4,13 +4,17 @@ import com.google.common.base.Preconditions;
 import com.ongres.benchmark.jdbc.ConnectionSupplier;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.logging.log4j.LogManager;
@@ -24,17 +28,24 @@ public class PostgresFlightBenchmark implements Runnable, AutoCloseable {
 
   private final AtomicLong idGenerator = new AtomicLong();
   private final ConnectionSupplier connectionSupplier;
+  private final int bookingSleep;
+  private final int dayRange;
 
-  private PostgresFlightBenchmark(ConnectionSupplier connectionSupplier) {
+  private PostgresFlightBenchmark(ConnectionSupplier connectionSupplier, int bookingSleep,
+      int dayRange) {
     super();
     this.connectionSupplier = connectionSupplier;
+    this.bookingSleep = bookingSleep;
+    this.dayRange = dayRange;
   }
 
   /**
    * Create an instance of {@class MongoFlightBenchmark}.
    */
-  public static PostgresFlightBenchmark create(ConnectionSupplier connectionSupplier) {
-    return new PostgresFlightBenchmark(connectionSupplier);
+  public static PostgresFlightBenchmark create(ConnectionSupplier connectionSupplier,
+      int bookingSleep, int dayRange) {
+    Preconditions.checkArgument(dayRange > 0);
+    return new PostgresFlightBenchmark(connectionSupplier, bookingSleep, dayRange);
   }
 
   @Override
@@ -50,12 +61,16 @@ public class PostgresFlightBenchmark implements Runnable, AutoCloseable {
   private void userOperation() throws Exception {
     try (Connection connection = connectionSupplier.get()) {
       try {
-        Document userSchedule = getUserSchedule(connection);
-        Object userId = generateUserId();
-        Timestamp currentTimestamp = Timestamp.from(Instant.now());
+        final Document userSchedule = getUserSchedule(connection);
+        final Object userId = generateUserId();
+        final Instant now = Instant.now();
+        final Timestamp currentTimestamp = Timestamp.from(now);
+        final Date day = Date.valueOf(LocalDate.now().plus(
+            now.toEpochMilli() % dayRange, ChronoUnit.DAYS));
+        TimeUnit.SECONDS.sleep(bookingSleep);
         insertSeat(connection, userSchedule, userId, currentTimestamp);
         insertPayment(connection, userSchedule, userId, currentTimestamp);
-        insertAudit(connection, userSchedule, currentTimestamp);
+        insertAudit(connection, userSchedule, day, currentTimestamp);
         connection.commit();
       } catch (Exception ex) {
         try {
@@ -107,13 +122,15 @@ public class PostgresFlightBenchmark implements Runnable, AutoCloseable {
   }
 
   private void insertAudit(Connection connection, Document userSchedule,
-      Timestamp currentTimestamp) throws SQLException {
+      Date day, Timestamp currentTimestamp) throws SQLException {
     try (PreparedStatement statement = connection.prepareStatement(
-        "insert into audit (schedule_id,seats_occupied,date) values (?,1,?)"
-        + " on conflict do update set seats_occupied = seats_occupied + 1, date = ?")) {
+        "insert into audit (schedule_id,seats_occupied,date) values (?,?,1,?)"
+        + " on conflict do update set day = ?, seats_occupied = seats_occupied + 1, date = ?")) {
       statement.setString(1, userSchedule.getString("_id"));
-      statement.setTimestamp(2, currentTimestamp);
+      statement.setDate(2, day);
       statement.setTimestamp(3, currentTimestamp);
+      statement.setDate(4, day);
+      statement.setTimestamp(5, currentTimestamp);
     }
   }
 
