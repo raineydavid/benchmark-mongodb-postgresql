@@ -1,14 +1,17 @@
 package com.ongres.benchmark.config.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
+import com.mongodb.ReadConcern;
+import com.mongodb.ReadPreference;
+import com.mongodb.WriteConcern;
 import com.ongres.benchmark.Metric;
 import com.ongres.benchmark.config.model.target.Target;
 import com.ongres.benchmark.config.picocli.DurationConverter;
 import com.ongres.benchmark.config.picocli.LogLevelConverter;
 import com.ongres.benchmark.config.picocli.PicocliArrayList;
 
+import java.sql.Connection;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Locale;
@@ -19,14 +22,12 @@ import picocli.CommandLine.Option;
 
 public class Config {
 
-  @JsonProperty
   private Target target = new Target();
 
   @Option(names = {"--log-level"},
       description = "Set logging level (all, debug, error, fatal, info, off, trace, warn)",
       required = false, 
       converter = LogLevelConverter.class)
-  @JsonProperty
   private String logLevel;
   
   @Option(names = {"--parallelism"}, 
@@ -62,19 +63,16 @@ public class Config {
       description = "Set metrics period", 
       required = false,
       converter = DurationConverter.class)
-  @JsonProperty
   private String metrics;
 
   @Option(names = {"--metrics-reporter"}, 
       description = "Set metrics reporter", 
       required = true)
-  @JsonProperty
   private String metricsReporter = MetricReporterType.JXM.name();
 
   @Option(names = {"--metrics-filter"}, 
       description = "Set metrics filter for log and csv",
       required = false, split = ",")
-  @JsonProperty
   private PicocliArrayList<String> metricsFilter;
 
   @Option(names = {"--min-connections"}, 
@@ -91,15 +89,38 @@ public class Config {
       description = "Establishment wait timeout for connection to the target database", 
       required = true,
       converter = DurationConverter.class)
-  @JsonProperty
   private String connectionWaitTimeout = "PT3S";
 
   @Option(names = {"--connection-idle-timeout"}, 
       description = "Idle timeout for connection to the target database", 
       required = true,
       converter = DurationConverter.class)
-  @JsonProperty
   private String connectionIdleTimeout = "PT60S";
+
+  @Option(names = {"--mongo-not-casually-consistent"}, 
+      description = "Set mongo casually consistent sessions", 
+      required = true)
+  private boolean mongoNotCasuallyConsistent = false;
+
+  @Option(names = {"--mongo-read-preference"}, 
+      description = "Set mongo read preference", 
+      required = true)
+  private String mongoReadPreference = "PRIMARY";
+
+  @Option(names = {"--mongo-read-concern"}, 
+      description = "Set mongo read concern", 
+      required = true)
+  private String mongoReadConcern = "SNAPSHOT";
+
+  @Option(names = {"--mongo-write-concern"}, 
+      description = "Set mongo write concern", 
+      required = true)
+  private String mongoWriteConcern = "MAJORITY";
+
+  @Option(names = {"--sql-isolation-level"}, 
+      description = "Set SQL transaction isolation level", 
+      required = true)
+  private String sqlIsolationLevel = "REPEATABLE_READ";
 
   public Target getTarget() {
     return target;
@@ -285,5 +306,145 @@ public class Config {
 
   public void setConnectionIdleTimeout(String connectionIdleTimeout) {
     this.connectionIdleTimeout = connectionIdleTimeout;
+  }
+
+  public boolean isMongoNotCasuallyConsistent() {
+    return mongoNotCasuallyConsistent;
+  }
+
+  public void setMongoNotCasuallyConsistent(boolean mongoNotCasuallyConsistent) {
+    this.mongoNotCasuallyConsistent = mongoNotCasuallyConsistent;
+  }
+
+  public String getMongoReadPreference() {
+    return mongoReadPreference;
+  }
+
+  /**
+   * Return write concern as {@code ReadPreference}.
+   */
+  @JsonIgnore
+  public ReadPreference getMongoReadPreferenceAsReadPreference() {
+    String mongoReadPreference = this.mongoReadPreference.replaceAll("[ -]", "_");
+    if (mongoReadPreference.equalsIgnoreCase("NEAREST")) {
+      return ReadPreference.nearest();
+    }
+    if (mongoReadPreference.equalsIgnoreCase("PRIMARY")) {
+      return ReadPreference.primary();
+    }
+    if (mongoReadPreference.equalsIgnoreCase("SECONDARY")) {
+      return ReadPreference.secondary();
+    }
+    if (mongoReadPreference.equalsIgnoreCase("SECONDARY_PREFERRED")) {
+      return ReadPreference.secondaryPreferred();
+    }
+    if (mongoReadPreference.equalsIgnoreCase("PRIMARY_PREFERRED")) {
+      return ReadPreference.primaryPreferred();
+    }
+    throw new IllegalArgumentException(this.mongoReadPreference);
+  }
+
+  public void setMongoReadPreference(String mongoReadPreference) {
+    this.mongoReadPreference = mongoReadPreference;
+  }
+
+  public String getMongoReadConcern() {
+    return mongoReadConcern;
+  }
+
+  /**
+   * Return write concern as {@code ReadConcern}.
+   */
+  @JsonIgnore
+  public ReadConcern getMongoReadConcernAsReadConcern() {
+    if (mongoReadConcern.equalsIgnoreCase("AVAILABLE")) {
+      return ReadConcern.AVAILABLE;
+    }
+    if (mongoReadConcern.equalsIgnoreCase("MAJORITY")) {
+      return ReadConcern.MAJORITY;
+    }
+    if (mongoReadConcern.equalsIgnoreCase("DEFAULT")) {
+      return ReadConcern.DEFAULT;
+    }
+    if (mongoReadConcern.equalsIgnoreCase("LINEARIZABLE")) {
+      return ReadConcern.LINEARIZABLE;
+    }
+    if (mongoReadConcern.equalsIgnoreCase("SNAPSHOT")) {
+      return ReadConcern.SNAPSHOT;
+    }
+    throw new IllegalArgumentException(mongoReadConcern);
+  }
+
+  public void setMongoReadConcern(String mongoReadConcern) {
+    this.mongoReadConcern = mongoReadConcern;
+  }
+
+  public String getMongoWriteConcern() {
+    return mongoWriteConcern;
+  }
+
+  /**
+   * Return write concern as {@code WriteConcern}.
+   */
+  @JsonIgnore
+  public WriteConcern getMongoWriteConcernAsWriteConcern() {
+    if (mongoWriteConcern.equalsIgnoreCase("ACKNOWLEDGED")) {
+      return WriteConcern.ACKNOWLEDGED;
+    }
+    if (mongoWriteConcern.equalsIgnoreCase("MAJORITY")) {
+      return WriteConcern.MAJORITY;
+    }
+    if (mongoWriteConcern.equalsIgnoreCase("JOURNALED")) {
+      return WriteConcern.JOURNALED;
+    }
+    if (mongoWriteConcern.equalsIgnoreCase("UNACKNOWLEDGED")) {
+      return WriteConcern.UNACKNOWLEDGED;
+    }
+    if (mongoWriteConcern.equalsIgnoreCase("W1")) {
+      return WriteConcern.W1;
+    }
+    if (mongoWriteConcern.equalsIgnoreCase("W2")) {
+      return WriteConcern.W2;
+    }
+    if (mongoWriteConcern.equalsIgnoreCase("W3")) {
+      return WriteConcern.W3;
+    }
+    throw new IllegalArgumentException(mongoWriteConcern);
+  }
+
+  public void setMongoWriteConcern(String mongoWriteConcern) {
+    this.mongoWriteConcern = mongoWriteConcern;
+  }
+
+  public String getSqlIsolationLevel() {
+    return sqlIsolationLevel;
+  }
+
+  /**
+   * Return SQL isolation level as int.
+   */
+  @JsonIgnore
+  public int getSqlIsolationLevelAsInt() {
+    String jdbcIsolationLevel = this.sqlIsolationLevel.replaceAll("[ -]", "_");
+    if (jdbcIsolationLevel.equalsIgnoreCase("NONE")) {
+      return Connection.TRANSACTION_NONE;
+    }
+    if (jdbcIsolationLevel.equalsIgnoreCase("READ_UNCOMMITTED")) {
+      return Connection.TRANSACTION_READ_UNCOMMITTED;
+    }
+    if (jdbcIsolationLevel.equalsIgnoreCase("READ_COMMITTED")) {
+      return Connection.TRANSACTION_READ_COMMITTED;
+    }
+    if (jdbcIsolationLevel.equalsIgnoreCase("REPEATABLE_READ")) {
+      return Connection.TRANSACTION_REPEATABLE_READ;
+    }
+    if (jdbcIsolationLevel.equalsIgnoreCase("SERIALIZABLE")) {
+      return Connection.TRANSACTION_SERIALIZABLE;
+    }
+    throw new IllegalArgumentException(this.sqlIsolationLevel);
+  }
+
+  public void setSqlIsolationLevel(String sqlIsolationLevel) {
+    this.sqlIsolationLevel = sqlIsolationLevel;
   }
 }

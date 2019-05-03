@@ -56,10 +56,11 @@ public class PostgresBenchmarkIt {
         "--parallelism", "40", 
         "--day-range", "30", 
         "--booking-sleep", "0", 
+        "--connection-wait-timeout", "PT0S", 
         "--target-database-port", "" + postgres.getPort(5432),
         "--metrics", "PT10S",
         "--metrics-reporter", "log",
-        "--transactions", "1000000");
+        "--transactions", "100000");
   }
 
   private void setupBenchmark(Container postgres)
@@ -75,11 +76,11 @@ public class PostgresBenchmarkIt {
         Connection connection = connectionSupplier.get();
         Statement statement = connection.createStatement()) {
       logger.info("Cleanup schema");
-      statement.execute("drop table if exists aircraft");
-      statement.execute("drop table if exists schedule");
-      statement.execute("drop table if exists seat");
-      statement.execute("drop table if exists payment");
       statement.execute("drop table if exists audit");
+      statement.execute("drop table if exists payment");
+      statement.execute("drop table if exists seat");
+      statement.execute("drop table if exists schedule");
+      statement.execute("drop table if exists aircraft");
       logger.info("Creating schema");
       statement.execute("create extension if not exists \"uuid-ossp\"");
       statement.execute("create table aircraft ("
@@ -100,12 +101,15 @@ public class PostgresBenchmarkIt {
           + "aircraft text, "
           + "duration text)");
       statement.execute("create table seat ("
-          + "user_id uuid, "
-          + "schedule_id uuid, "
-          + "date timestamp without time zone)");
+          + "user_id bigint not null,"
+          + "schedule_id uuid not null,"
+          + "day date not null,"
+          + "date timestamp without time zone,"
+          + "primary key (user_id,schedule_id,day))");
       statement.execute("create table payment ("
-          + "user_id uuid, "
-          + "amount money)");
+          + "user_id bigint,"
+          + "amount money,"
+          + "date timestamp without time zone)");
       statement.execute("create table audit ("
           + "schedule_id uuid not null,"
           + "day date not null,"
@@ -125,6 +129,10 @@ public class PostgresBenchmarkIt {
       connection.commit();
       statement.execute("alter table schedule add column schedule_id uuid"
           + " primary key default uuid_generate_v4()");
+      statement.execute("alter table seat add"
+          + " foreign key (schedule_id) references schedule(schedule_id)");
+      statement.execute("alter table audit add"
+          + " foreign key (schedule_id) references schedule(schedule_id)");
       connection.commit();
     }
   }

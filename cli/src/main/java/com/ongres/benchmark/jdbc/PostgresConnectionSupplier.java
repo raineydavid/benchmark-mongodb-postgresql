@@ -25,6 +25,7 @@ public class PostgresConnectionSupplier extends AbstractPoolableConnectionSuppli
   @Override
   protected void setupJdbcDriver(Properties jdbcDriverProperties) {
     PGProperty.ASSUME_MIN_SERVER_VERSION.set(jdbcDriverProperties, "9.4");
+    PGProperty.STRING_TYPE.set(jdbcDriverProperties, "unspecified");
     PGProperty.REWRITE_BATCHED_INSERTS.set(jdbcDriverProperties, "true");
     PGProperty.APPLICATION_NAME.set(jdbcDriverProperties, "benchmark");
     jdbcDriverProperties.setProperty("stringType", "unspecified");

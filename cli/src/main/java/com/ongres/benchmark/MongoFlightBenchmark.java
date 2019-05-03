@@ -1,10 +1,10 @@
 package com.ongres.benchmark;
 
 import com.google.common.base.Preconditions;
+import com.mongodb.ClientSessionOptions;
 import com.mongodb.MongoCommandException;
 import com.mongodb.MongoException;
 import com.mongodb.TransactionOptions;
-import com.mongodb.WriteConcern;
 import com.mongodb.client.AggregateIterable;
 import com.mongodb.client.ClientSession;
 import com.mongodb.client.MongoClient;
@@ -12,6 +12,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Aggregates;
 import com.mongodb.client.model.UpdateOptions;
+import com.ongres.benchmark.config.model.Config;
 
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -38,36 +39,34 @@ public class MongoFlightBenchmark implements Runnable, AutoCloseable {
   private final MongoCollection<Document> seat;
   private final MongoCollection<Document> payment;
   private final MongoCollection<Document> audit;
-  private final int bookingSleep;
-  private final int dayRange;
+  private final Config config;
 
   private MongoFlightBenchmark(MongoClient client, MongoCollection<Document> schedule,
       MongoCollection<Document> seat, MongoCollection<Document> payment,
-      MongoCollection<Document> audit, int bookingSleep, int dayRange) {
+      MongoCollection<Document> audit, Config config) {
     super();
     this.client = client;
     this.schedule = schedule;
     this.seat = seat;
     this.payment = payment;
     this.audit = audit;
-    this.bookingSleep = bookingSleep;
-    this.dayRange = dayRange;
+    this.config = config;
   }
 
   /**
    * Create an instance of {@class MongoFlightBenchmark}.
    */
-  public static MongoFlightBenchmark create(MongoClient client, String databaseName,
-      int bookingSleep, int dayRange) {
-    Preconditions.checkArgument(bookingSleep >= 0);
-    Preconditions.checkArgument(dayRange > 0);
-    MongoDatabase database = client.getDatabase(databaseName);
+  public static MongoFlightBenchmark create(MongoClient client,
+      Config config) {
+    Preconditions.checkArgument(config.getBookingSleep() >= 0);
+    Preconditions.checkArgument(config.getDayRange() > 0);
+    MongoDatabase database = client.getDatabase(config.getTarget().getDatabase().getName());
     return new MongoFlightBenchmark(client,
         database.getCollection("schedule"),
         database.getCollection("seat"),
         database.getCollection("payment"),
         database.getCollection("audit"),
-        bookingSleep, dayRange);
+        config);
   }
 
   @Override
@@ -81,9 +80,14 @@ public class MongoFlightBenchmark implements Runnable, AutoCloseable {
   }
 
   private void userOperation() throws Exception {
-    try (ClientSession session = client.startSession()) {
+    try (ClientSession session = client.startSession(
+        ClientSessionOptions.builder()
+        .causallyConsistent(!config.isMongoNotCasuallyConsistent())
+        .build())) {
       session.startTransaction(TransactionOptions.builder()
-          .writeConcern(WriteConcern.MAJORITY)
+          .readPreference(config.getMongoReadPreferenceAsReadPreference())
+          .readConcern(config.getMongoReadConcernAsReadConcern())
+          .writeConcern(config.getMongoWriteConcernAsWriteConcern())
           .build());
       try {
         final Document userSchedule = getUserSchedule(session);
@@ -91,24 +95,24 @@ public class MongoFlightBenchmark implements Runnable, AutoCloseable {
         final Instant now = Instant.now();
         final Timestamp currentTimestamp = Timestamp.from(now);
         final Date day = Date.valueOf(LocalDate.now().plus(
-            now.toEpochMilli() % dayRange, ChronoUnit.DAYS));
-        TimeUnit.SECONDS.sleep(bookingSleep);
+            now.toEpochMilli() % config.getDayRange(), ChronoUnit.DAYS));
+        TimeUnit.SECONDS.sleep(config.getBookingSleep());
         insertSeat(session, userSchedule, userId, currentTimestamp);
         insertPayment(session, userSchedule, userId, currentTimestamp);
         insertAudit(session, userSchedule, day, currentTimestamp);
         session.commitTransaction();
       } catch (Exception ex) {
+        try {
+          session.abortTransaction();
+        } catch (Exception abortEx) {
+          logger.error(abortEx);
+        }
         if (ex instanceof MongoCommandException
             && (((MongoCommandException) ex).hasErrorLabel(
                 MongoException.TRANSIENT_TRANSACTION_ERROR_LABEL)
                 || ((MongoCommandException) ex).hasErrorLabel(
                     MongoException.UNKNOWN_TRANSACTION_COMMIT_RESULT_LABEL))) {
           throw new RetryUserOperationException(ex);
-        }
-        try {
-          session.abortTransaction();
-        } catch (Exception abortEx) {
-          logger.error(abortEx);
         }
         throw ex;
       }

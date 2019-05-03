@@ -263,9 +263,14 @@ public class App  extends Options implements Callable<Void> {
     config.setConnectionTimeout(getConfig().getConnectionWaitTimeoutAsDuration().toMillis());
     config.setIdleTimeout(getConfig().getConnectionIdleTimeoutAsDuration().toMillis());
     ConnectionSupplier connectionSupplier =
-        new HikariConnectionSupplier(new PostgresConnectionSupplier(jdbcProperties), config);
+        new HikariConnectionSupplier(new PostgresConnectionSupplier(jdbcProperties) {
+          @Override
+          public int getTransactionIsolationLevel() {
+            return getConfig().getSqlIsolationLevelAsInt();
+          }
+        }, config);
     PostgresFlightBenchmark benchmark = PostgresFlightBenchmark.create(connectionSupplier,
-        getConfig().getBookingSleep(), getConfig().getDayRange());
+        getConfig());
     closer.register(() -> Unchecked.runnable(() -> benchmark.close()));
     return new BenchmarkRunner(benchmark);
   }
@@ -288,8 +293,7 @@ public class App  extends Options implements Callable<Void> {
                 TimeUnit.MILLISECONDS))
         .build());
     MongoFlightBenchmark benchmark = MongoFlightBenchmark.create(client, 
-        getConfig().getTarget().getDatabase().getName(),
-        getConfig().getBookingSleep(), getConfig().getDayRange());
+        getConfig());
     closer.register(() -> Unchecked.runnable(() -> benchmark.close()));
     return new BenchmarkRunner(benchmark);
   }
