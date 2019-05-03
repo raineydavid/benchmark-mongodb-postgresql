@@ -76,7 +76,31 @@ public class Config {
       required = false, split = ",")
   @JsonProperty
   private PicocliArrayList<String> metricsFilter;
-  
+
+  @Option(names = {"--min-connections"}, 
+      description = "Set min # of idle connections to the target database", 
+      required = true)
+  private int minConnections = 1;
+
+  @Option(names = {"--max-connections"}, 
+      description = "Set max # of connections to the target database", 
+      required = true)
+  private int maxConnections = 20;
+
+  @Option(names = {"--connection-wait-timeout"}, 
+      description = "Establishment wait timeout for connection to the target database", 
+      required = true,
+      converter = DurationConverter.class)
+  @JsonProperty
+  private String connectionWaitTimeout = "PT3S";
+
+  @Option(names = {"--connection-idle-timeout"}, 
+      description = "Idle timeout for connection to the target database", 
+      required = true,
+      converter = DurationConverter.class)
+  @JsonProperty
+  private String connectionIdleTimeout = "PT60S";
+
   public Target getTarget() {
     return target;
   }
@@ -219,5 +243,47 @@ public class Config {
 
   public void setDayRange(int dayRange) {
     this.dayRange = dayRange;
+  }
+
+  public int getMinConnections() {
+    return minConnections;
+  }
+
+  public void setMinConnections(int minConnections) {
+    this.minConnections = minConnections;
+  }
+
+  public int getMaxConnections() {
+    return maxConnections;
+  }
+
+  public void setMaxConnections(int maxConnections) {
+    this.maxConnections = maxConnections;
+  }
+
+  public String getConnectionWaitTimeout() {
+    return connectionWaitTimeout;
+  }
+
+  @JsonIgnore
+  public Duration getConnectionWaitTimeoutAsDuration() {
+    return Duration.parse(connectionWaitTimeout);
+  }
+
+  public void setConnectionWaitTimeout(String connectionWaitTimeout) {
+    this.connectionWaitTimeout = connectionWaitTimeout;
+  }
+
+  public String getConnectionIdleTimeout() {
+    return connectionIdleTimeout;
+  }
+
+  @JsonIgnore
+  public Duration getConnectionIdleTimeoutAsDuration() {
+    return Duration.parse(connectionWaitTimeout);
+  }
+
+  public void setConnectionIdleTimeout(String connectionIdleTimeout) {
+    this.connectionIdleTimeout = connectionIdleTimeout;
   }
 }

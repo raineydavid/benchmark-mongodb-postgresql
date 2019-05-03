@@ -14,6 +14,7 @@ import com.ongres.benchmark.config.model.Config;
 import com.ongres.benchmark.jdbc.ConnectionSupplier;
 import com.ongres.benchmark.jdbc.HikariConnectionSupplier;
 import com.ongres.benchmark.jdbc.PostgresConnectionSupplier;
+import com.zaxxer.hikari.HikariConfig;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -256,8 +257,13 @@ public class App  extends Options implements Callable<Void> {
     PGProperty.PG_DBNAME.set(jdbcProperties, getConfig().getTarget().getDatabase().getName());
     PGProperty.USER.set(jdbcProperties, getConfig().getTarget().getDatabase().getUser());
     PGProperty.PASSWORD.set(jdbcProperties, getConfig().getTarget().getDatabase().getPassword());
+    HikariConfig config = new HikariConfig();
+    config.setMinimumIdle(getConfig().getMinConnections());
+    config.setMaximumPoolSize(getConfig().getMaxConnections());
+    config.setConnectionTimeout(getConfig().getConnectionWaitTimeoutAsDuration().toMillis());
+    config.setIdleTimeout(getConfig().getConnectionIdleTimeoutAsDuration().toMillis());
     ConnectionSupplier connectionSupplier =
-        new HikariConnectionSupplier(new PostgresConnectionSupplier(jdbcProperties));
+        new HikariConnectionSupplier(new PostgresConnectionSupplier(jdbcProperties), config);
     PostgresFlightBenchmark benchmark = PostgresFlightBenchmark.create(connectionSupplier,
         getConfig().getBookingSleep(), getConfig().getDayRange());
     closer.register(() -> Unchecked.runnable(() -> benchmark.close()));
@@ -274,10 +280,12 @@ public class App  extends Options implements Callable<Void> {
             + getConfig().getTarget().getDatabase().getHost() 
             + ":" + getConfig().getTarget().getDatabase().getPort()))
         .applyToConnectionPoolSettings(builder -> builder
-            .minSize(1)
-            .maxSize(20)
-            .maxWaitTime(3, TimeUnit.SECONDS)
-            .maxConnectionIdleTime(60, TimeUnit.SECONDS))
+            .minSize(getConfig().getMinConnections())
+            .maxSize(getConfig().getMaxConnections())
+            .maxWaitTime(getConfig().getConnectionWaitTimeoutAsDuration().toMillis(), 
+                TimeUnit.MILLISECONDS)
+            .maxConnectionIdleTime(getConfig().getConnectionIdleTimeoutAsDuration().toMillis(), 
+                TimeUnit.MILLISECONDS))
         .build());
     MongoFlightBenchmark benchmark = MongoFlightBenchmark.create(client, 
         getConfig().getTarget().getDatabase().getName(),
