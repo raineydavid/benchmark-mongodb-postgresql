@@ -25,7 +25,7 @@ Run following command:
 mvn clean package
 ```
 
-The command will compile source code and generate an uber-JAR archive in ```app/target/benchmark-<version>.jar``
+The command will compile source code and generate an uber-JAR archive in ```cli/target/benchmark-<version>.jar``
 
 ## Maven Profiles
 
@@ -55,6 +55,6 @@ mvn verify -P integration -Dmaven.failsafe.debug="-Xdebug -Xrunjdwp:transport=dt
 Go to the root folder of the project and run the following commands:
 
 ```
-java -jar main/target/benchmark-<version>.jar
+java -jar cli/target/benchmark-<version>.jar
 ```
 
