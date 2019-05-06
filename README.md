@@ -17,7 +17,7 @@ This tool will perform a benchmark against configured database using existing or
 
 ## How to build
 
-Java 8 JDK and Maven are required to build this project.
+Java 8 JDK and Maven are required to build this project (you can replace all `mvn` commands with `./mvnw` that will launch a provided wrapper that will download and install Maven for ease of use).
 
 Run following command:
 

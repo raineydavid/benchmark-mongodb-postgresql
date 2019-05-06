@@ -5,3 +5,5 @@ target/
 .checkstyle
 .idea/
 .factorypath
+.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/*.class
