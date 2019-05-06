@@ -11,7 +11,7 @@
 
   <groupId>com.ongres.benchmark</groupId>
   <artifactId>benchmark-parent</artifactId>
-  <version>0.1-SNAPSHOT</version>
+  <version>1.0</version>
   <packaging>pom</packaging>
 
   <name>benchmark: parent pom</name>
