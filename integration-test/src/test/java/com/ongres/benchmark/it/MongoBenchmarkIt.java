@@ -45,7 +45,7 @@ public class MongoBenchmarkIt {
     setupBenchmark(mongo);
     App.test(
         "--benchmark-target", "mongo", 
-        "--parallelism", "40", 
+        "--parallelism", "20", 
         "--day-range", "1", 
         "--booking-sleep", "0", 
         "--target-database-port", "" + mongo.getPort(27017),

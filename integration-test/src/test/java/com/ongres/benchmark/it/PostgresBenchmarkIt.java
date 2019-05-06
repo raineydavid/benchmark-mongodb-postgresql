@@ -53,14 +53,14 @@ public class PostgresBenchmarkIt {
     setupBenchmark(postgres);
     App.test(
         "--benchmark-target", "postgres", 
-        "--parallelism", "40", 
+        "--parallelism", "20", 
         "--day-range", "30", 
         "--booking-sleep", "0", 
         "--connection-wait-timeout", "PT0S", 
         "--target-database-port", "" + postgres.getPort(5432),
         "--metrics", "PT10S",
         "--metrics-reporter", "log",
-        "--transactions", "100000");
+        "--transactions", "300000");
   }
 
   private void setupBenchmark(Container postgres)
