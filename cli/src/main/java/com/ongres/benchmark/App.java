@@ -169,24 +169,40 @@ public class App  extends Options implements Callable<Void> {
             + getConfig().getTargetType() + ". Must be postgres or mongo");
       }
       
-      Scheduler scheduler = Schedulers.newParallel("benchmark", getConfig().getParallelism());
-      closer.register(() -> Unchecked.runnable(() -> scheduler.dispose()));
-      AppSubscriber appSubscriber = Flux.range(0, 
-            getConfig().getTransactions() != null 
-            ? getConfig().getTransactions() : Integer.MAX_VALUE)
+      Scheduler scheduler = Schedulers.newParallel(
+          "benchmark", getConfig().getParallelism(), false);
+      closer.register(() -> Unchecked.runnable(() -> scheduler.dispose()).run());
+      CompletableFuture<Void> termination = new CompletableFuture<Void>();
+      Future<Void> future = Flux.range(0, 
+          getConfig().getTransactions() != null 
+          ? getConfig().getTransactions() : Integer.MAX_VALUE)
           .flatMap(i -> Mono.just(i).subscribeOn(scheduler)
               .doOnNext(Unchecked.consumer(ii -> benchmark.run())),
               getConfig().getParallelism())
+          .doOnCancel(() -> termination.complete(null))
+          .doOnTerminate(() -> termination.complete(null))
           .subscribeWith(new AppSubscriber());
-      if (getConfig().getDurationAsDuration().isPresent()) {
-        try {
-          appSubscriber
-            .get(getConfig().getDurationAsDuration().get().toSeconds(), TimeUnit.SECONDS);
-        } catch (TimeoutException ex) {
-          return;
+      try {
+        logger.info("Benchmark started");
+        if (getConfig().getTransactions() != null) {
+          logger.info("Transactions: " + getConfig().getTransactions());
         }
-      } else {
-        appSubscriber.get();
+        if (getConfig().getDurationAsDuration().isPresent()) {
+          logger.info("Duration: " + getConfig().getDurationAsDuration().get());
+          try {
+            future.get(getConfig().getDurationAsDuration().get().toSeconds(), TimeUnit.SECONDS);
+          } catch (TimeoutException ex) {
+            return;
+          }
+        } else {
+          future.get();
+        }
+      } finally {
+        if (!future.isDone()) {
+          future.cancel(true);
+        }
+        termination.get();
+        logger.info("Benchmark completed");
       }
     }
   }
@@ -225,7 +241,11 @@ public class App  extends Options implements Callable<Void> {
 
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
-      throw new UnsupportedOperationException();
+      if (!isDone()) {
+        cancel();
+        return true;
+      }
+      return false;
     }
 
     @Override
@@ -271,7 +291,7 @@ public class App  extends Options implements Callable<Void> {
         }, config);
     PostgresFlightBenchmark benchmark = PostgresFlightBenchmark.create(connectionSupplier,
         getConfig());
-    closer.register(() -> Unchecked.runnable(() -> benchmark.close()));
+    closer.register(() -> Unchecked.runnable(() -> benchmark.close()).run());
     return new BenchmarkRunner(benchmark);
   }
 
@@ -294,7 +314,7 @@ public class App  extends Options implements Callable<Void> {
         .build());
     MongoFlightBenchmark benchmark = MongoFlightBenchmark.create(client, 
         getConfig());
-    closer.register(() -> Unchecked.runnable(() -> benchmark.close()));
+    closer.register(() -> Unchecked.runnable(() -> benchmark.close()).run());
     return new BenchmarkRunner(benchmark);
   }
 
