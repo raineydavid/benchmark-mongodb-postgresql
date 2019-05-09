@@ -301,7 +301,7 @@ public class Config {
 
   @JsonIgnore
   public Duration getConnectionIdleTimeoutAsDuration() {
-    return Duration.parse(connectionWaitTimeout);
+    return Duration.parse(connectionIdleTimeout);
   }
 
   public void setConnectionIdleTimeout(String connectionIdleTimeout) {
