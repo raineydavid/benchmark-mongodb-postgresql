@@ -2,11 +2,14 @@
 <Configuration status="WARN">
   <Appenders>
     <Console name="Console" target="SYSTEM_OUT">
-      <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %highlight{%level}{FATAL=bg_red, ERROR=red, WARN=yellow, INFO=green, DEBUG=blue, TRACE=magenta} - %message{nolookups}%throwable%n" />
+      <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %class %highlight{%level}{FATAL=bg_red, ERROR=red, WARN=yellow, INFO=green, DEBUG=blue, TRACE=magenta} - %message{nolookups}%throwable%n" />
     </Console>
   </Appenders>
   <Loggers>
-    <Logger name="com.ongres.benchmark" level="TRACE" />
+    <Logger name="com.ongres.benchmark" level="INFO" />
+    <Logger name="com.zaxxer.hikari" level="WARN" />
+    <Logger name="com.mongodb" level="WARN" />
+    <Logger name="org.mongodb" level="WARN" />
     <Root level="INFO">
       <AppenderRef ref="Console" />
     </Root>
