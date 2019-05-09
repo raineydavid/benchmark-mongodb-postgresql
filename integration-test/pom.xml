@@ -6,7 +6,7 @@
   <parent>
     <groupId>com.ongres.benchmark</groupId>
     <artifactId>benchmark-parent</artifactId>
-    <version>1.0</version>
+    <version>1.1</version>
   </parent>
 
   <artifactId>benchmark-integration-test</artifactId>
