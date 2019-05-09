@@ -53,7 +53,7 @@ public class MongoBenchmarkIt {
         "--target-database-name", "test",
         "--metrics", "PT10S",
         "--metrics-reporter", "log",
-        "--transactions", "10000");
+        "--duration", "PT60S");
   }
 
   private void setupBenchmark(Container mongo) throws DockerException, InterruptedException {

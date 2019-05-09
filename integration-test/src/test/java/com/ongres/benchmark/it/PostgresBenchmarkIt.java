@@ -60,7 +60,7 @@ public class PostgresBenchmarkIt {
         "--target-database-port", "" + postgres.getPort(5432),
         "--metrics", "PT10S",
         "--metrics-reporter", "log",
-        "--transactions", "300000");
+        "--duration", "PT60S");
   }
 
   private void setupBenchmark(Container postgres)
