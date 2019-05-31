@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -32,6 +33,7 @@ import org.apache.commons.csv.CSVParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.jooq.lambda.Unchecked;
 
 public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
@@ -70,7 +72,11 @@ public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
 
   @Override
   public void iteration() {
-    Unchecked.runnable(this::userOperation).run();
+    if (config.isDisableTransaction()) {
+      Unchecked.runnable(this::userOperationWithoutTransaction).run();
+    } else {
+      Unchecked.runnable(this::userOperation).run();
+    }
   }
 
   private Object generateUserId() {
@@ -79,9 +85,15 @@ public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
   }
 
   private void setupDatabase() throws Exception {
+    logger.info("Cleanup");
+    database.getCollection("aircraft").drop();
+    database.getCollection("schedule").drop();
+    database.getCollection("seat").drop();
+    database.getCollection("payment").drop();
+    database.getCollection("audit").drop();
     CSVFormat csvFormat = CSVFormat.newFormat(';')
         .withNullString("\\N");
-    database.getCollection("aircraft").drop();
+    logger.info("Importing aircraft");
     database.createCollection("aircraft");
     MongoCollection<Document> aircraft = database.getCollection("aircraft");
     CSVParser.parse(
@@ -91,7 +103,7 @@ public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
         .forEach(record -> aircraft.insertOne(new Document(record.toMap().entrySet().stream()
             .filter(e -> e.getValue() != null)
             .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue())))));
-    database.getCollection("schedule").drop();
+    logger.info("Importing schedule");
     database.createCollection("schedule");
     MongoCollection<Document> schedule = database.getCollection("schedule");
     CSVParser.parse(
@@ -102,11 +114,9 @@ public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
         .forEach(record -> schedule.insertOne(new Document(record.toMap().entrySet().stream()
             .filter(e -> e.getValue() != null)
             .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue())))));
-    database.getCollection("seat").drop();
+    logger.info("Creating seat, payment and audit");
     database.createCollection("seat");
-    database.getCollection("payment").drop();
     database.createCollection("payment");
-    database.getCollection("audit").drop();
     database.createCollection("audit");
   }
 
@@ -150,49 +160,114 @@ public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
     }
   }
 
-  private Document getUserSchedule(ClientSession clientSession) {
+  private void userOperationWithoutTransaction() throws Exception {
+    final Document userSchedule = getUserSchedule();
+    final Object userId = generateUserId();
+    final Instant now = Instant.now();
+    final Timestamp currentTimestamp = Timestamp.from(now);
+    final Date day = Date.valueOf(LocalDate.now().plus(
+        now.toEpochMilli() % config.getDayRange(), ChronoUnit.DAYS));
+    TimeUnit.SECONDS.sleep(config.getBookingSleep());
+    insertSeat(userSchedule, userId, currentTimestamp);
+    insertPayment(userSchedule, userId, currentTimestamp);
+    insertAudit(userSchedule, day, currentTimestamp);
+  }
+
+  private Document getUserSchedule(ClientSession session) {
     AggregateIterable<Document> schedules = database.getCollection("schedule")
-        .aggregate(clientSession,
-            Arrays.asList(
-                Aggregates.sample(1),
-                Aggregates.lookup("aircraft", "aircraft", "iata", "aircraft"),
-                Aggregates.project(new Document()
-                    .append("_id", 1)
-                    .append("duration", 1)
-                    .append("capacity", "$aircraft.capacity"))));
+        .aggregate(session,
+            getUserScheduleAggregate());
     return schedules.first();
+  }
+
+  private Document getUserSchedule() {
+    AggregateIterable<Document> schedules = database.getCollection("schedule")
+        .aggregate(
+            getUserScheduleAggregate());
+    return schedules.first();
+  }
+
+  private List<Bson> getUserScheduleAggregate() {
+    return Arrays.asList(
+        Aggregates.sample(1),
+        Aggregates.lookup("aircraft", "aircraft", "iata", "aircraft"),
+        Aggregates.project(new Document()
+            .append("_id", 1)
+            .append("duration", 1)
+            .append("capacity", "$aircraft.capacity")));
   }
 
   private void insertSeat(ClientSession session, Document userSchedule,
       Object userId, Timestamp currentTimestamp) {
-    database.getCollection("seat").insertOne(session, new Document()
+    database.getCollection("seat").insertOne(session, 
+        createSeat(userSchedule, userId, currentTimestamp));
+  }
+
+  private void insertSeat(Document userSchedule,
+      Object userId, Timestamp currentTimestamp) {
+    database.getCollection("seat").insertOne(createSeat(userSchedule, userId, currentTimestamp));
+  }
+
+  private Document createSeat(Document userSchedule, Object userId, Timestamp currentTimestamp) {
+    return new Document()
         .append("user_id", userId)
         .append("schedule_id", userSchedule.getObjectId("_id"))
-        .append("date", currentTimestamp));
+        .append("date", currentTimestamp);
   }
 
   private void insertPayment(ClientSession session, Document userSchedule,
       Object userId, Timestamp currentTimestamp) {
-    database.getCollection("payment").insertOne(session, new Document()
+    database.getCollection("payment").insertOne(session, 
+        createPayment(userSchedule, userId, currentTimestamp));
+  }
+
+  private void insertPayment(Document userSchedule,
+      Object userId, Timestamp currentTimestamp) {
+    database.getCollection("payment").insertOne(
+        createPayment(userSchedule, userId, currentTimestamp));
+  }
+
+  private Document createPayment(Document userSchedule, Object userId, Timestamp currentTimestamp) {
+    return new Document()
         .append("user_id", userId)
         .append("amount", Optional.ofNullable(userSchedule.getString("duration"))
             .map(d -> d.split(":"))
             .map(s -> Integer.parseInt(s[0]) * 60 + Integer.parseInt(s[1]))
             .map(d -> Math.max(42, d * 42))
             .orElse(42))
-        .append("date", currentTimestamp));
+        .append("date", currentTimestamp);
   }
 
   private void insertAudit(ClientSession session, Document userSchedule,
       Date day, Timestamp currentTimestamp) {
     database.getCollection("audit").updateOne(session, 
-        new Document()
+        auditToUpdate(userSchedule, day), 
+        auditUpdate(currentTimestamp),
+        auditUpdateOptions());
+  }
+
+  private void insertAudit(Document userSchedule,
+      Date day, Timestamp currentTimestamp) {
+    database.getCollection("audit").updateOne(
+        auditToUpdate(userSchedule, day), 
+        auditUpdate(currentTimestamp),
+        auditUpdateOptions());
+  }
+  
+  private Document auditToUpdate(Document userSchedule, Date day) {
+    return new Document()
         .append("schedule_id", userSchedule.getObjectId("_id"))
-        .append("day", day), 
-        new Document()
-        .append("$set", new Document().append("date", currentTimestamp))
-        .append("$inc", new Document().append("seats_occupied", 1)),
-        new UpdateOptions().upsert(true));
+        .append("day", day);
+  }
+
+  private Document auditUpdate(Timestamp currentTimestamp) {
+    return new Document()
+    .append("$set", new Document().append("date", currentTimestamp))
+    .append("$inc", new Document().append("seats_occupied", 1));
+  }
+
+  private UpdateOptions auditUpdateOptions() {
+    return new UpdateOptions().upsert(true);
   }
 
   @Override

@@ -184,8 +184,8 @@ public class App  extends Options implements Callable<Void> {
       closer.register(() -> Unchecked.runnable(() -> scheduler.dispose()).run());
       CompletableFuture<Void> termination = new CompletableFuture<Void>();
       Future<Void> future = Flux.range(0, 
-          getConfig().getTransactions() != null 
-          ? getConfig().getTransactions() : Integer.MAX_VALUE)
+          getConfig().getIterations() != null 
+          ? getConfig().getIterations() : Integer.MAX_VALUE)
           .flatMap(i -> Mono.just(i).subscribeOn(scheduler)
               .doOnNext(Unchecked.consumer(ii -> benchmark.run())),
               getConfig().getParallelism())
@@ -194,8 +194,13 @@ public class App  extends Options implements Callable<Void> {
           .subscribeWith(new AppSubscriber());
       try {
         logger.info("Benchmark started");
-        if (getConfig().getTransactions() != null) {
-          logger.info("Transactions: " + getConfig().getTransactions());
+
+        if (getConfig().isDisableTransaction()) {
+          logger.info("Transactions are disabled");
+        }
+        
+        if (getConfig().getIterations() != null) {
+          logger.info("Iterations: " + getConfig().getIterations());
         }
         if (getConfig().getDurationAsDuration().isPresent()) {
           logger.info("Duration: " + getConfig().getDurationAsDuration().get());
@@ -294,6 +299,11 @@ public class App  extends Options implements Callable<Void> {
     config.setIdleTimeout(getConfig().getConnectionIdleTimeoutAsDuration().toMillis());
     ConnectionSupplier connectionSupplier =
         new HikariConnectionSupplier(new PostgresConnectionSupplier(jdbcProperties) {
+          @Override
+          public boolean isAutoCommit() {
+            return getConfig().isDisableTransaction();
+          }
+
           @Override
           public int getTransactionIsolationLevel() {
             return getConfig().getSqlIsolationLevelAsInt();

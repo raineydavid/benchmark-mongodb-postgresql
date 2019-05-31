@@ -44,10 +44,10 @@ public class Config {
       converter = DurationConverter.class)
   private String duration;
 
-  @Option(names = {"--transactions"}, 
-      description = "Set benchmark transactions that will be executed", 
+  @Option(names = {"--iterations"}, 
+      description = "Set benchmark iterations that will be executed", 
       required = false)
-  private Integer transactions;
+  private Integer iterations;
 
   @Option(names = {"--booking-sleep"}, 
       description = "Set booking sleep before inserting seat table", 
@@ -132,6 +132,11 @@ public class Config {
       required = true)
   private boolean onlySetup = false;
 
+  @Option(names = {"--disable-transaction"}, 
+      description = "Disable transaction", 
+      required = true)
+  private boolean disableTransaction = false;
+
   public Target getTarget() {
     return target;
   }
@@ -183,12 +188,12 @@ public class Config {
     this.duration = duration;
   }
 
-  public Integer getTransactions() {
-    return transactions;
+  public Integer getIterations() {
+    return iterations;
   }
 
-  public void setTransactions(Integer transactions) {
-    this.transactions = transactions;
+  public void setIterations(Integer iterations) {
+    this.iterations = iterations;
   }
 
   public String getMetrics() {
@@ -472,5 +477,13 @@ public class Config {
 
   public void setOnlySetup(boolean onlySetup) {
     this.onlySetup = onlySetup;
+  }
+
+  public boolean isDisableTransaction() {
+    return disableTransaction;
+  }
+
+  public void setDisableTransaction(boolean disableTransaction) {
+    this.disableTransaction = disableTransaction;
   }
 }

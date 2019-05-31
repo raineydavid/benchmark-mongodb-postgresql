@@ -110,7 +110,9 @@ public class PostgresFlightBenchmark implements Benchmark, AutoCloseable {
           + "date timestamp without time zone,"
           + "seats_occupied int,"
           + "primary key (schedule_id,day))");
-      connection.commit();
+      if (!config.isDisableTransaction()) {
+        connection.commit();
+      }
       logger.info("Importing data");
       PgConnection pgConnection = connection.unwrap(PgConnection.class);
       CopyManager copyManager = pgConnection.getCopyAPI();
@@ -120,14 +122,18 @@ public class PostgresFlightBenchmark implements Benchmark, AutoCloseable {
       copyManager.copyIn("copy schedule from stdin"
           + " with csv header delimiter ';' null '\\N'", 
           PostgresFlightBenchmark.class.getResourceAsStream("/schedule.txt"));
-      connection.commit();
+      if (!config.isDisableTransaction()) {
+        connection.commit();
+      }
       statement.execute("alter table schedule add column schedule_id uuid"
           + " primary key default uuid_generate_v4()");
       statement.execute("alter table seat add"
           + " foreign key (schedule_id) references schedule(schedule_id)");
       statement.execute("alter table audit add"
           + " foreign key (schedule_id) references schedule(schedule_id)");
-      connection.commit();
+      if (!config.isDisableTransaction()) {
+        connection.commit();
+      }
     }
   }
 
@@ -144,12 +150,16 @@ public class PostgresFlightBenchmark implements Benchmark, AutoCloseable {
         insertSeat(connection, userSchedule, userId, day, currentTimestamp);
         insertPayment(connection, userSchedule, userId, currentTimestamp);
         insertAudit(connection, userSchedule, day, currentTimestamp);
-        connection.commit();
+        if (!config.isDisableTransaction()) {
+          connection.commit();
+        }
       } catch (Exception ex) {
-        try {
-          connection.rollback();
-        } catch (Exception abortEx) {
-          logger.error(abortEx);
+        if (!config.isDisableTransaction()) {
+          try {
+            connection.rollback();
+          } catch (Exception abortEx) {
+            logger.error(abortEx);
+          }
         }
         if (ex instanceof PSQLException
             && (((PSQLException) ex).getSQLState().equals("40001"))) {

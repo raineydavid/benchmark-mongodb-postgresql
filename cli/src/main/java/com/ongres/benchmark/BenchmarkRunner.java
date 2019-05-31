@@ -6,7 +6,7 @@ import com.codahale.metrics.Timer;
 public class BenchmarkRunner implements Runnable {
 
   private final Benchmark benchmark;
-  private final Meter transactionMeter = MetricsManager.meter(Metric.TRANSACTIONS);
+  private final Meter transactionMeter = MetricsManager.meter(Metric.ITERATIONS);
   private final Meter retryMeter = MetricsManager.meter(Metric.RETRY);
   private final Timer responseTimer = MetricsManager.timer(Metric.RESPONSE_TIME);
   
