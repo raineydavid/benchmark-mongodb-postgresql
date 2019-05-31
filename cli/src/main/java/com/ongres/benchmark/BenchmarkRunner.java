@@ -4,15 +4,19 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.Timer;
 
 public class BenchmarkRunner implements Runnable {
-  
-  private final Runnable runnable;
+
+  private final Benchmark benchmark;
   private final Meter transactionMeter = MetricsManager.meter(Metric.TRANSACTIONS);
   private final Meter retryMeter = MetricsManager.meter(Metric.RETRY);
   private final Timer responseTimer = MetricsManager.timer(Metric.RESPONSE_TIME);
   
-  public BenchmarkRunner(Runnable runnable) {
+  public BenchmarkRunner(Benchmark benchmark) {
     super();
-    this.runnable = runnable;
+    this.benchmark = benchmark;
+  }
+
+  public void setup() {
+    benchmark.setup();
   }
 
   @Override
@@ -24,12 +28,24 @@ public class BenchmarkRunner implements Runnable {
   private void runWithRetry() {
     while (true) {
       try {
-        runnable.run();
+        benchmark.iteration();
         break;
       } catch (RetryUserOperationException ex) {
         retryMeter.mark();
         continue;
       }
     }
+  }
+
+  public interface Benchmark {
+    /**
+     * Setup and cleanup the database.
+     */
+    public void setup();
+
+    /**
+     * Run a single client iteration.
+     */
+    public void iteration();
   }
 }

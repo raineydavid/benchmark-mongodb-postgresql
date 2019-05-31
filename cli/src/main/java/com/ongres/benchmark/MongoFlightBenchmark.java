@@ -12,8 +12,10 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Aggregates;
 import com.mongodb.client.model.UpdateOptions;
+import com.ongres.benchmark.BenchmarkRunner.Benchmark;
 import com.ongres.benchmark.config.model.Config;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -23,33 +25,28 @@ import java.util.Arrays;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bson.Document;
 import org.jooq.lambda.Unchecked;
 
-public class MongoFlightBenchmark implements Runnable, AutoCloseable {
+public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
 
   private final Logger logger = LogManager.getLogger();
 
   private final AtomicLong idGenerator = new AtomicLong(0);
   private final MongoClient client;
-  private final MongoCollection<Document> schedule;
-  private final MongoCollection<Document> seat;
-  private final MongoCollection<Document> payment;
-  private final MongoCollection<Document> audit;
+  private final MongoDatabase database;
   private final Config config;
 
-  private MongoFlightBenchmark(MongoClient client, MongoCollection<Document> schedule,
-      MongoCollection<Document> seat, MongoCollection<Document> payment,
-      MongoCollection<Document> audit, Config config) {
+  private MongoFlightBenchmark(MongoClient client, MongoDatabase database, Config config) {
     super();
     this.client = client;
-    this.schedule = schedule;
-    this.seat = seat;
-    this.payment = payment;
-    this.audit = audit;
+    this.database = database;
     this.config = config;
   }
 
@@ -62,21 +59,55 @@ public class MongoFlightBenchmark implements Runnable, AutoCloseable {
     Preconditions.checkArgument(config.getDayRange() > 0);
     MongoDatabase database = client.getDatabase(config.getTarget().getDatabase().getName());
     return new MongoFlightBenchmark(client,
-        database.getCollection("schedule"),
-        database.getCollection("seat"),
-        database.getCollection("payment"),
-        database.getCollection("audit"),
+        database,
         config);
   }
 
   @Override
-  public void run() {
+  public void setup() {
+    Unchecked.runnable(this::setupDatabase).run();
+  }
+
+  @Override
+  public void iteration() {
     Unchecked.runnable(this::userOperation).run();
   }
 
   private Object generateUserId() {
     Object userId = idGenerator.getAndIncrement();
     return userId;
+  }
+
+  private void setupDatabase() throws Exception {
+    CSVFormat csvFormat = CSVFormat.newFormat(';')
+        .withNullString("\\N");
+    database.getCollection("aircraft").drop();
+    database.createCollection("aircraft");
+    MongoCollection<Document> aircraft = database.getCollection("aircraft");
+    CSVParser.parse(
+        MongoFlightBenchmark.class.getResourceAsStream("/aircrafts.txt"), 
+        StandardCharsets.UTF_8, csvFormat
+        .withHeader("name", "icao", "iata", "capacity", "country"))
+        .forEach(record -> aircraft.insertOne(new Document(record.toMap().entrySet().stream()
+            .filter(e -> e.getValue() != null)
+            .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue())))));
+    database.getCollection("schedule").drop();
+    database.createCollection("schedule");
+    MongoCollection<Document> schedule = database.getCollection("schedule");
+    CSVParser.parse(
+        MongoFlightBenchmark.class.getResourceAsStream("/schedule.txt"), 
+        StandardCharsets.UTF_8, csvFormat
+        .withHeader("from_airport", "to_airport", "valid_from", "valid_until", "days",
+            "departure", "arrival", "flight", "aircraft", "duration"))
+        .forEach(record -> schedule.insertOne(new Document(record.toMap().entrySet().stream()
+            .filter(e -> e.getValue() != null)
+            .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue())))));
+    database.getCollection("seat").drop();
+    database.createCollection("seat");
+    database.getCollection("payment").drop();
+    database.createCollection("payment");
+    database.getCollection("audit").drop();
+    database.createCollection("audit");
   }
 
   private void userOperation() throws Exception {
@@ -120,20 +151,21 @@ public class MongoFlightBenchmark implements Runnable, AutoCloseable {
   }
 
   private Document getUserSchedule(ClientSession clientSession) {
-    AggregateIterable<Document> schedules = schedule.aggregate(clientSession,
-        Arrays.asList(
-            Aggregates.sample(1),
-            Aggregates.lookup("aircraft", "aircraft", "iata", "aircraft"),
-            Aggregates.project(new Document()
-                .append("_id", 1)
-                .append("duration", 1)
-                .append("capacity", "$aircraft.capacity"))));
+    AggregateIterable<Document> schedules = database.getCollection("schedule")
+        .aggregate(clientSession,
+            Arrays.asList(
+                Aggregates.sample(1),
+                Aggregates.lookup("aircraft", "aircraft", "iata", "aircraft"),
+                Aggregates.project(new Document()
+                    .append("_id", 1)
+                    .append("duration", 1)
+                    .append("capacity", "$aircraft.capacity"))));
     return schedules.first();
   }
 
   private void insertSeat(ClientSession session, Document userSchedule,
       Object userId, Timestamp currentTimestamp) {
-    seat.insertOne(session, new Document()
+    database.getCollection("seat").insertOne(session, new Document()
         .append("user_id", userId)
         .append("schedule_id", userSchedule.getObjectId("_id"))
         .append("date", currentTimestamp));
@@ -141,7 +173,7 @@ public class MongoFlightBenchmark implements Runnable, AutoCloseable {
 
   private void insertPayment(ClientSession session, Document userSchedule,
       Object userId, Timestamp currentTimestamp) {
-    payment.insertOne(session, new Document()
+    database.getCollection("payment").insertOne(session, new Document()
         .append("user_id", userId)
         .append("amount", Optional.ofNullable(userSchedule.getString("duration"))
             .map(d -> d.split(":"))
@@ -153,7 +185,7 @@ public class MongoFlightBenchmark implements Runnable, AutoCloseable {
 
   private void insertAudit(ClientSession session, Document userSchedule,
       Date day, Timestamp currentTimestamp) {
-    audit.updateOne(session, 
+    database.getCollection("audit").updateOne(session, 
         new Document()
         .append("schedule_id", userSchedule.getObjectId("_id"))
         .append("day", day), 

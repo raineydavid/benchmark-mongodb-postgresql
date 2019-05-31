@@ -60,6 +60,7 @@
     <jool.version>0.9.14</jool.version>
     <jackson.version>2.9.8</jackson.version>
     <picocli.version>3.9.6</picocli.version>
+    <commons-csv.version>1.6</commons-csv.version>
     <docker-junit-extension.version>1.2.0</docker-junit-extension.version>
     <reactor.version>Californium-SR6</reactor.version>
     <hikaricp.version>3.3.1</hikaricp.version>
@@ -120,6 +121,11 @@
         <groupId>info.picocli</groupId>
         <artifactId>picocli</artifactId>
         <version>${picocli.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-csv</artifactId>
+        <version>${commons-csv.version}</version>
       </dependency>
       <dependency>
         <groupId>com.ongres</groupId>

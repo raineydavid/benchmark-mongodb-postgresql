@@ -122,6 +122,16 @@ public class Config {
       required = true)
   private String sqlIsolationLevel = "REPEATABLE_READ";
 
+  @Option(names = {"--skip-setup"}, 
+      description = "Skip database setup", 
+      required = true)
+  private boolean skipSetup = false;
+
+  @Option(names = {"--only-setup"}, 
+      description = "Only perform database setup", 
+      required = true)
+  private boolean onlySetup = false;
+
   public Target getTarget() {
     return target;
   }
@@ -446,5 +456,21 @@ public class Config {
 
   public void setSqlIsolationLevel(String sqlIsolationLevel) {
     this.sqlIsolationLevel = sqlIsolationLevel;
+  }
+
+  public boolean isSkipSetup() {
+    return skipSetup;
+  }
+
+  public void setSkipSetup(boolean skipSetup) {
+    this.skipSetup = skipSetup;
+  }
+
+  public boolean isOnlySetup() {
+    return onlySetup;
+  }
+
+  public void setOnlySetup(boolean onlySetup) {
+    this.onlySetup = onlySetup;
   }
 }

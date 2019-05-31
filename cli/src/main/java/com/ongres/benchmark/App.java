@@ -169,6 +169,16 @@ public class App  extends Options implements Callable<Void> {
             + getConfig().getTargetType() + ". Must be postgres or mongo");
       }
       
+      if (!getConfig().isSkipSetup()) {
+        logger.info("Benchmark setup");
+        benchmark.setup();
+      }
+      
+      if (getConfig().isOnlySetup()) {
+        logger.info("Only setup, skipping benchmark");
+        return;
+      }
+      
       Scheduler scheduler = Schedulers.newParallel(
           "benchmark", getConfig().getParallelism(), false);
       closer.register(() -> Unchecked.runnable(() -> scheduler.dispose()).run());
