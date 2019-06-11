@@ -1,7 +1,6 @@
 package com.ongres.benchmark;
 
 import com.google.common.base.Preconditions;
-import com.ongres.benchmark.BenchmarkRunner.Benchmark;
 import com.ongres.benchmark.config.model.Config;
 import com.ongres.benchmark.jdbc.ConnectionSupplier;
 
@@ -16,6 +15,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -27,11 +27,14 @@ import org.postgresql.copy.CopyManager;
 import org.postgresql.jdbc.PgConnection;
 import org.postgresql.util.PSQLException;
 
-public class PostgresFlightBenchmark implements Benchmark, AutoCloseable {
+public class PostgresFlightBenchmark extends Benchmark {
+
+  private static final int MAX_SCHEDULE_ID = 14185;
 
   private final Logger logger = LogManager.getLogger();
 
   private final AtomicLong idGenerator = new AtomicLong();
+  private final Random random = new Random();
   private final ConnectionSupplier connectionSupplier;
   private final Config config;
 
@@ -57,13 +60,18 @@ public class PostgresFlightBenchmark implements Benchmark, AutoCloseable {
   }
 
   @Override
-  public void iteration() {
+  protected void iteration() {
     Unchecked.runnable(this::userOperation).run();
   }
 
   private Object generateUserId() {
     Object userId = idGenerator.getAndIncrement();
     return userId;
+  }
+
+  private synchronized Object randomScheduleId() {
+    Object scheduleId = random.nextInt(MAX_SCHEDULE_ID);
+    return scheduleId;
   }
 
   private void databaseSetup() throws Exception {
@@ -74,6 +82,7 @@ public class PostgresFlightBenchmark implements Benchmark, AutoCloseable {
       statement.execute("drop table if exists payment");
       statement.execute("drop table if exists seat");
       statement.execute("drop table if exists schedule");
+      statement.execute("drop sequence if exists schedule_id");
       statement.execute("drop table if exists aircraft");
       logger.info("Creating schema");
       statement.execute("create extension if not exists \"uuid-ossp\"");
@@ -96,7 +105,7 @@ public class PostgresFlightBenchmark implements Benchmark, AutoCloseable {
           + "duration text)");
       statement.execute("create table seat ("
           + "user_id bigint not null,"
-          + "schedule_id uuid not null,"
+          + "schedule_id int not null,"
           + "day date not null,"
           + "date timestamp without time zone,"
           + "primary key (user_id,schedule_id,day))");
@@ -105,7 +114,7 @@ public class PostgresFlightBenchmark implements Benchmark, AutoCloseable {
           + "amount money,"
           + "date timestamp without time zone)");
       statement.execute("create table audit ("
-          + "schedule_id uuid not null,"
+          + "schedule_id int not null,"
           + "day date not null,"
           + "date timestamp without time zone,"
           + "seats_occupied int,"
@@ -125,8 +134,9 @@ public class PostgresFlightBenchmark implements Benchmark, AutoCloseable {
       if (!config.isDisableTransaction()) {
         connection.commit();
       }
-      statement.execute("alter table schedule add column schedule_id uuid"
-          + " primary key default uuid_generate_v4()");
+      statement.execute("create sequence schedule_id minvalue 0");
+      statement.execute("alter table schedule add column schedule_id int"
+          + " primary key default nextval('schedule_id')");
       statement.execute("alter table seat add"
           + " foreign key (schedule_id) references schedule(schedule_id)");
       statement.execute("alter table audit add"
@@ -177,8 +187,9 @@ public class PostgresFlightBenchmark implements Benchmark, AutoCloseable {
   private Document getUserSchedule(Connection connection) throws SQLException {
     try (Statement statement = connection.createStatement();
         ResultSet resultSet = statement.executeQuery("select schedule_id, duration, capacity"
-            + " from schedule tablesample system(10)"
+            + " from schedule "
             + " inner join aircraft on (schedule.aircraft = aircraft.iata)"
+            + " where schedule.schedule_id = " + randomScheduleId()
             + " limit 1")) {
       Preconditions.checkState(resultSet.next());
       return new Document()
@@ -230,7 +241,7 @@ public class PostgresFlightBenchmark implements Benchmark, AutoCloseable {
   }
 
   @Override
-  public void close() throws Exception {
+  protected void internalClose() throws Exception {
     connectionSupplier.close();
   }
 }

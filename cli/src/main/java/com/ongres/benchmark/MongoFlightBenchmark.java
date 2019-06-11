@@ -1,6 +1,7 @@
 package com.ongres.benchmark;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.mongodb.ClientSessionOptions;
 import com.mongodb.MongoCommandException;
 import com.mongodb.MongoException;
@@ -11,8 +12,9 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Aggregates;
+import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Indexes;
 import com.mongodb.client.model.UpdateOptions;
-import com.ongres.benchmark.BenchmarkRunner.Benchmark;
 import com.ongres.benchmark.config.model.Config;
 
 import java.nio.charset.StandardCharsets;
@@ -24,9 +26,12 @@ import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -36,11 +41,14 @@ import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.jooq.lambda.Unchecked;
 
-public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
+public class MongoFlightBenchmark extends Benchmark {
+
+  private static final int MAX_SCHEDULE_ID = 14185;
 
   private final Logger logger = LogManager.getLogger();
 
   private final AtomicLong idGenerator = new AtomicLong(0);
+  private final Random random = new Random();
   private final MongoClient client;
   private final MongoDatabase database;
   private final Config config;
@@ -71,7 +79,7 @@ public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
   }
 
   @Override
-  public void iteration() {
+  protected void iteration() {
     if (config.isDisableTransaction()) {
       Unchecked.runnable(this::userOperationWithoutTransaction).run();
     } else {
@@ -82,6 +90,11 @@ public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
   private Object generateUserId() {
     Object userId = idGenerator.getAndIncrement();
     return userId;
+  }
+
+  private synchronized Object randomScheduleId() {
+    Object scheduleId = random.nextInt(MAX_SCHEDULE_ID);
+    return scheduleId;
   }
 
   private void setupDatabase() throws Exception {
@@ -100,20 +113,27 @@ public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
         MongoFlightBenchmark.class.getResourceAsStream("/aircrafts.txt"), 
         StandardCharsets.UTF_8, csvFormat
         .withHeader("name", "icao", "iata", "capacity", "country"))
-        .forEach(record -> aircraft.insertOne(new Document(record.toMap().entrySet().stream()
+        .forEach(record -> aircraft.insertOne(new Document(
+            record.toMap().entrySet().stream()
             .filter(e -> e.getValue() != null)
             .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue())))));
+    aircraft.createIndex(Indexes.ascending("iata"));
     logger.info("Importing schedule");
     database.createCollection("schedule");
     MongoCollection<Document> schedule = database.getCollection("schedule");
+    AtomicInteger scheduleId = new AtomicInteger(0);
     CSVParser.parse(
         MongoFlightBenchmark.class.getResourceAsStream("/schedule.txt"), 
         StandardCharsets.UTF_8, csvFormat
         .withHeader("from_airport", "to_airport", "valid_from", "valid_until", "days",
             "departure", "arrival", "flight", "aircraft", "duration"))
-        .forEach(record -> schedule.insertOne(new Document(record.toMap().entrySet().stream()
+        .forEach(record -> schedule.insertOne(new Document(
+            Stream.concat(
+                ImmutableMap.of("schedule_id", scheduleId.getAndIncrement()).entrySet().stream(),
+                record.toMap().entrySet().stream())
             .filter(e -> e.getValue() != null)
             .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue())))));
+    schedule.createIndex(Indexes.ascending("schedule_id"));
     logger.info("Creating seat, payment and audit");
     database.createCollection("seat");
     database.createCollection("payment");
@@ -189,10 +209,10 @@ public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
 
   private List<Bson> getUserScheduleAggregate() {
     return Arrays.asList(
-        Aggregates.sample(1),
+        Aggregates.match(Filters.eq("schedule_id", randomScheduleId())),
         Aggregates.lookup("aircraft", "aircraft", "iata", "aircraft"),
         Aggregates.project(new Document()
-            .append("_id", 1)
+            .append("schedule_id", 1)
             .append("duration", 1)
             .append("capacity", "$aircraft.capacity")));
   }
@@ -211,7 +231,7 @@ public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
   private Document createSeat(Document userSchedule, Object userId, Timestamp currentTimestamp) {
     return new Document()
         .append("user_id", userId)
-        .append("schedule_id", userSchedule.getObjectId("_id"))
+        .append("schedule_id", userSchedule.get("schedule_id"))
         .append("date", currentTimestamp);
   }
 
@@ -256,7 +276,7 @@ public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
   
   private Document auditToUpdate(Document userSchedule, Date day) {
     return new Document()
-        .append("schedule_id", userSchedule.getObjectId("_id"))
+        .append("schedule_id", userSchedule.get("schedule_id"))
         .append("day", day);
   }
 
@@ -271,7 +291,7 @@ public class MongoFlightBenchmark implements Benchmark, AutoCloseable {
   }
 
   @Override
-  public void close() throws Exception {
+  protected void internalClose() throws Exception {
     client.close();
   }
 }

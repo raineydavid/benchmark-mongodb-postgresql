@@ -3,7 +3,7 @@ package com.ongres.benchmark;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Timer;
 
-public class BenchmarkRunner implements Runnable {
+public class BenchmarkRunner implements Runnable, AutoCloseable {
 
   private final Benchmark benchmark;
   private final Meter transactionMeter = MetricsManager.meter(Metric.ITERATIONS);
@@ -28,7 +28,7 @@ public class BenchmarkRunner implements Runnable {
   private void runWithRetry() {
     while (true) {
       try {
-        benchmark.iteration();
+        benchmark.run();
         break;
       } catch (RetryUserOperationException ex) {
         retryMeter.mark();
@@ -37,15 +37,9 @@ public class BenchmarkRunner implements Runnable {
     }
   }
 
-  public interface Benchmark {
-    /**
-     * Setup and cleanup the database.
-     */
-    public void setup();
-
-    /**
-     * Run a single client iteration.
-     */
-    public void iteration();
+  @Override
+  public void close() throws Exception {
+    benchmark.close();
   }
+
 }

@@ -46,7 +46,6 @@ import picocli.CommandLine.IDefaultValueProvider;
 import picocli.CommandLine.Model.ArgSpec;
 import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
@@ -129,35 +128,7 @@ public class App  extends Options implements Callable<Void> {
   private void execute() throws Exception {
     try (Closer closer = Closer.create()) {
       updateLogLevel(closer);
-  
-      Closeable metricsReporter = () -> { };
-      if (!getConfig().getMetricsAsDuration().orElse(Duration.ZERO).isZero()) {
-        switch (getConfig().getMetricsReporterAsEnum()) {
-          case CSV:
-            metricsReporter = MetricsManager.startCsvReporter(getConfig().getMetricsAsDuration()
-                .get().getSeconds(), TimeUnit.SECONDS, 
-                getConfig().getMetricsFilterAsImmutableList().isEmpty() 
-                ? MetricFilter.ALL 
-                : (name, metric) -> getConfig()
-                  .getMetricsFilterAsImmutableList().contains(name));
-            break;
-          case JXM:
-            metricsReporter = MetricsManager.startJmxResporter();
-            break;
-          case LOG:
-            metricsReporter = MetricsManager.startSlf4jReporter(getConfig().getMetricsAsDuration()
-                .get().getSeconds(), TimeUnit.SECONDS, 
-                getConfig().getMetricsFilterAsImmutableList().isEmpty() 
-                    ? MetricFilter.ALL 
-                    : (name, metric) -> getConfig()
-                      .getMetricsFilterAsImmutableList().contains(name));
-            break;
-          default:
-            break;
-        }
-      }
-      closer.register(metricsReporter);
-      
+
       final BenchmarkRunner benchmark;
       
       if (getConfig().getTargetType().equals("mongo")) {
@@ -183,12 +154,20 @@ public class App  extends Options implements Callable<Void> {
           "benchmark", getConfig().getParallelism(), false);
       closer.register(() -> Unchecked.runnable(() -> scheduler.dispose()).run());
       CompletableFuture<Void> termination = new CompletableFuture<Void>();
-      Future<Void> future = Flux.range(0, 
+
+      if (!getConfig().getMetricsAsDuration().orElse(Duration.ZERO).isZero()) {
+        logger.info("Starting collecting metrics");
+        startMetrics(closer);
+      }
+
+      AppSubscriber future = Flux.range(0, 
           getConfig().getIterations() != null 
           ? getConfig().getIterations() : Integer.MAX_VALUE)
-          .flatMap(i -> Mono.just(i).subscribeOn(scheduler)
-              .doOnNext(Unchecked.consumer(ii -> benchmark.run())),
-              getConfig().getParallelism())
+          .parallel(getConfig().getParallelism())
+          .runOn(scheduler)
+          .doOnNext(Unchecked.consumer(ii -> benchmark.run()))
+          .sequential()
+          .doOnDiscard(Integer.class, i -> termination.complete(null))
           .doOnCancel(() -> termination.complete(null))
           .doOnTerminate(() -> termination.complete(null))
           .subscribeWith(new AppSubscriber());
@@ -207,6 +186,7 @@ public class App  extends Options implements Callable<Void> {
           try {
             future.get(getConfig().getDurationAsDuration().get().toSeconds(), TimeUnit.SECONDS);
           } catch (TimeoutException ex) {
+            benchmark.close();
             return;
           }
         } else {
@@ -214,12 +194,40 @@ public class App  extends Options implements Callable<Void> {
         }
       } finally {
         if (!future.isDone()) {
-          future.cancel(true);
+          future.cancel();
         }
         termination.get();
         logger.info("Benchmark completed");
       }
     }
+  }
+
+  private void startMetrics(Closer closer) {
+    Closeable metricsReporter;
+    switch (getConfig().getMetricsReporterAsEnum()) {
+      case CSV:
+        metricsReporter = MetricsManager.startCsvReporter(getConfig().getMetricsAsDuration()
+            .get().getSeconds(), TimeUnit.SECONDS, 
+            getConfig().getMetricsFilterAsImmutableList().isEmpty() 
+            ? MetricFilter.ALL 
+            : (name, metric) -> getConfig()
+              .getMetricsFilterAsImmutableList().contains(name));
+        break;
+      case JXM:
+        metricsReporter = MetricsManager.startJmxResporter();
+        break;
+      case LOG:
+        metricsReporter = MetricsManager.startSlf4jReporter(getConfig().getMetricsAsDuration()
+            .get().getSeconds(), TimeUnit.SECONDS, 
+            getConfig().getMetricsFilterAsImmutableList().isEmpty() 
+                ? MetricFilter.ALL 
+                : (name, metric) -> getConfig()
+                  .getMetricsFilterAsImmutableList().contains(name));
+        break;
+      default:
+        throw new IllegalArgumentException();
+    }
+    closer.register(metricsReporter);
   }
 
   public class AppSubscriber extends BaseSubscriber<Object> implements Future<Void> {
@@ -256,11 +264,7 @@ public class App  extends Options implements Callable<Void> {
 
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
-      if (!isDone()) {
-        cancel();
-        return true;
-      }
-      return false;
+      throw new UnsupportedOperationException();
     }
 
     @Override
