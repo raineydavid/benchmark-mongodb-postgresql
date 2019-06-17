@@ -350,7 +350,6 @@ public class App  extends Options implements Callable<Void> {
     }
   }
 
-
   /**
    * Run the application.
    */

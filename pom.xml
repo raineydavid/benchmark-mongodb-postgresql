@@ -6,7 +6,7 @@
   <parent>
     <groupId>com.ongres</groupId>
     <artifactId>build-parent</artifactId>
-    <version>1.0.3</version>
+    <version>1.0.6</version>
   </parent>
 
   <groupId>com.ongres.benchmark</groupId>
@@ -90,7 +90,7 @@
       <dependency>
         <groupId>org.junit</groupId>
         <artifactId>junit-bom</artifactId>
-        <version>${junit.version}</version>
+        <version>${junit5.version}</version>
         <scope>import</scope>
         <type>pom</type>
       </dependency>

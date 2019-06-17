@@ -21,7 +21,8 @@ import java.util.Set;
 
 public class ConfigUtils {
 
-  private ConfigUtils() {}
+  private ConfigUtils() {
+  }
 
   /**
    * Parse the YAML configuration file.
