@@ -6,12 +6,12 @@
   <parent>
     <groupId>com.ongres</groupId>
     <artifactId>build-parent</artifactId>
-    <version>1.0.3</version>
+    <version>1.0.6</version>
   </parent>
 
   <groupId>com.ongres.benchmark</groupId>
   <artifactId>benchmark-parent</artifactId>
-  <version>1.2</version>
+  <version>1.3</version>
   <packaging>pom</packaging>
 
   <name>benchmark: parent pom</name>
@@ -42,6 +42,13 @@
       <name>Jorge Solórzano</name>
     </developer>
   </developers>
+
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    </license>
+  </licenses>
 
   <modules>
     <module>cli</module>
@@ -90,7 +97,7 @@
       <dependency>
         <groupId>org.junit</groupId>
         <artifactId>junit-bom</artifactId>
-        <version>${junit.version}</version>
+        <version>${junit5.version}</version>
         <scope>import</scope>
         <type>pom</type>
       </dependency>
@@ -206,4 +213,28 @@
       </exclusions>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>license-maven-plugin</artifactId>
+        <configuration>
+          <licenseName>apache_v2</licenseName>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check-file-header</goal>
+            </goals>
+            <phase>process-sources</phase>
+            <configuration>
+              <failOnMissingHeader>true</failOnMissingHeader>
+              <failOnNotUptodateHeader>true</failOnNotUptodateHeader>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>
