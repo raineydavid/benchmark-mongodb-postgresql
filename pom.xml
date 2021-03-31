@@ -63,7 +63,7 @@
     <maven.compiler.release>11</maven.compiler.release>
     <!-- Dependencies versions -->
     <postgresql-jdbc.version>42.2.4</postgresql-jdbc.version>
-    <guava.version>27.1-jre</guava.version>
+    <guava.version>29.0-jre</guava.version>
     <jool.version>0.9.14</jool.version>
     <jackson.version>2.9.8</jackson.version>
     <picocli.version>3.9.6</picocli.version>
